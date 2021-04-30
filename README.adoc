@@ -1,0 +1,60 @@
+= beaglecam
+Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ifdef::env-github[]
+:imagesdir: https://github.com/cristicc/beaglecam/blob/main/docs/img
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+ifndef::env-github[]
+:imagesdir: ./docs/img
+endif::[]
+:toc:
+:toc-placement!:
+:sectnums:
+:sectanchors:
+:sectlinks:
+
+toc::[]
+
+IMPORTANT: This is currently a work in progress..
+
+== Intro
+
+The main purpose of this work is to optimize the Linux kernel boot time,
+measured using an Arduino Nano 33 BLE board driving an alphanumeric LCD display
+via I2C.
+
+TODO: describe overall solution
+
+
+== Environment setup
+
+=== Hardware
+
+TODO: describe components and interconnections
+
+=== Software
+
+TODO: describe host OS, software packages
+
+
+== Build process
+
+=== Toolchain
+=== Rootfs
+=== U-Boot
+=== Linux kernel
+=== Arduino
+
+
+== Deployment and testing
+
+TODO: describe the software deployment on the target devices and system testing
+procedure
+
+== Further development
+
+TODO: describe future work and possible improvements
