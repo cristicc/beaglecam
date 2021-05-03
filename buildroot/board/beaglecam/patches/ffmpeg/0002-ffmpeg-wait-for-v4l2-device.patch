@@ -1,0 +1,21 @@
+Retry opening v4l2 device path for up to 2000 ms.
+
+Signed-off-by: Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+---
+
+--- a/libavdevice/v4l2.c	2021-04-19 17:41:23.929528443 +0300
++++ b/libavdevice/v4l2.c	2021-04-19 19:14:31.009535155 +0300
+@@ -151,7 +151,12 @@
+         flags |= O_NONBLOCK;
+     }
+ 
+-    fd = v4l2_open(device_path, flags, 0);
++    for (err = 0; err < 2000; err++) {
++        fd = v4l2_open(device_path, flags, 0);
++        if (fd >= 0) break;
++        av_usleep(1000);
++    }
++    
+     if (fd < 0) {
+         err = AVERROR(errno);
+         av_log(ctx, AV_LOG_ERROR, "Cannot open video device %s: %s\n",
