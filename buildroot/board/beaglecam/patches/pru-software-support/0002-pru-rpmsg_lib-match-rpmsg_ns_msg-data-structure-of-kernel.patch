@@ -1,0 +1,33 @@
+From 09093140c39c7e5af37225ed697db31607382f96 Mon Sep 17 00:00:00 2001
+From: Roger Quadros <rogerq@ti.com>
+Date: Mon, 19 Nov 2018 14:12:33 +0200
+Subject: [PATCH] rpmsg_lib: Match rpmsg_ns_msg data structure of kernel
+
+Match the rpmsg_ns_msg data structure of kernel (v4.20-rc1).
+It doesn't have the Description field.
+
+Signed-off-by: Roger Quadros <rogerq@ti.com>
+---
+ lib/src/rpmsg_lib/pru_rpmsg.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/lib/src/rpmsg_lib/pru_rpmsg.c b/lib/src/rpmsg_lib/pru_rpmsg.c
+index 99fd5ce..9a2df29 100644
+--- a/lib/src/rpmsg_lib/pru_rpmsg.c
++++ b/lib/src/rpmsg_lib/pru_rpmsg.c
+@@ -54,7 +54,6 @@ struct pru_rpmsg_hdr {
+ 
+ struct pru_rpmsg_ns_msg {
+ 	char		name[RPMSG_NAME_SIZE];
+-	char		desc[RPMSG_NAME_SIZE];
+ 	uint32_t	addr;
+ 	uint32_t	flags;
+ };
+@@ -176,7 +175,6 @@ int16_t pru_rpmsg_channel(
+ 
+ 	for (i = 0; i < RPMSG_NAME_SIZE; i++) {
+ 		ns_msg.name[i] = name[i];
+-		ns_msg.desc[i] = desc[i];
+ 	}
+ 	ns_msg.addr = port;
+ 	ns_msg.flags = flags;
