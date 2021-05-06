@@ -1,0 +1,1 @@
+#source "$BR2_EXTERNAL_BEAGLECAM_PATH/package/custom/Config.in"
