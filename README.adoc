@@ -1,21 +1,20 @@
 = beaglecam
 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 ifdef::env-github[]
-:imagesdir: https://github.com/cristicc/beaglecam/blob/main/docs/img
 :tip-caption: :bulb:
 :note-caption: :information_source:
 :important-caption: :heavy_exclamation_mark:
 :caution-caption: :fire:
 :warning-caption: :warning:
 endif::[]
-ifndef::env-github[]
-:imagesdir: ./docs/img
-endif::[]
+:imagesdir: docs/img
 :toc:
 :toc-placement!:
 :sectnums:
 :sectanchors:
 :sectlinks:
+:PROJECT_DIR: ${HOME}/beaglecam
+:OUTPUT_DIR: {PROJECT_DIR}/output
 
 toc::[]
 
@@ -30,23 +29,131 @@ via I2C.
 TODO: describe overall solution
 
 
-== Environment setup
+== Hardware setup
 
-=== Hardware
+=== Overview
+
+[ditaa]
+....
+             +----------------------------------------+
+             |           BEAGLEBONE BLACK             |
+             |                                        |
+             |      +-------------+                   |
+             |      | PIN HEADER  +-------+           |
+             |      |             |       |           |
+             |      +-------------+       |           |
+             |           ^                | I/O       |
+             |           | I/O            |           |
+             |           |                v           |
+ +--------+  | +---------+---+     /---------------\  |
+ |        +----+   PRU0      +---->|               |  |
+ | Cam    |  | +-------------+     |   Linux       |  |
+ | Module |  | |   PRU1      |     |    Kernel     |  |
+ |     {d}|  | |             |     |               |  |
+ +---+----+  | +-------------+     \---------------/  |
+     |       |                           ^            |
+     |       |  I2C                      |            |
+     +-----------------------------------+            |
+             |                                        |
+             +----------------------------------------+
+....
+
+=== BeagleBone Black
 
 TODO: describe components and interconnections
 
-=== Software
+[NOTE]
+For more details, please refer to the BeagleBone Black product page <<RefBeagleBoneBlack>>.
 
-TODO: describe host OS, software packages
+==== PRU Pins
+
+[NOTE]
+For more details about the Programmable Real-time Unit Sub System, please see <<RefAm33xxPrussv2>>.
+
+ *Note1: The PRU0 Registers{30,31} Bit 4 (GPIO3_18) is routed to P9_42-GPIO0_7 pin.  You MUST set GPIO0_7 to input mode in pinmuxing.
+Both of these signals connect to pin 42 of P11. Resistors are installed that allow for the GPIO3_18
+connection to be removed by removing R202. The intent is to allow the SW to use either of these
+signals, on pin 42. SW should set the unused pin in input mode when using the other pin. This
+allowed us to get an extra signal out to the expansion header.
+
+ *Note2: The PRU0 Registers{30,31} Bit 6 (GPIO3_20) is routed to P9_41-GPIO0_20(CLKOUT2). You must set GPIO0_20 to input mode in pinmuxing.
+Both of these signals connect to pin 41 of P11. Resistors are installed that allow for the GPIO3_20
+connection to be removed by removing R221. The intent is to allow the SW to use either of these
+signals, one or the other, on pin 41. SW should set the unused pin in input mode when using the
+other pin. This allowed us to get an extra signal out to the expansion header.
+
+ *Conflict1 on pr1_pru0_pru_r31_3
+AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, 0x0, MUX_MODE4) /* mcasp0_ahclkr.eCAP2_in_PWM2_out */
+
+.Available PRU inputs (R31)
+|===
+| PRU# | R31 bit | BB Header | BB Pin Name | ZCZ BallName  | Pinmux Mode | Comments
+
+| 0    |  0      | P9_31     | SPI1_SCLK   | mcasp0_aclkx  | Mode_6 |
+| 0    |  1      | P9_29     | SPI1_D0     | mcasp0_fsx    | Mode_6 |
+| 0    |  2      | P9_30     | SPI1_D1     | mcasp0_axr0   | Mode_6 |
+| 0    |  3      | P9_28     | SPI1_CS0    | mcasp0_ahclkr | Mode_6 | See Conflict1
+| 0    |  4      | P9_42     | GPIO3_18    | mcasp0_aclkr  | Mode_6 | See Note1
+| 0    |  5      | P9_27     | GPIO3_19    | mcasp0_fsr    | Mode_6 |
+| 0    |  6      | P9_41     | GPIO3_20    | mcasp0_axr1   | Mode_6 | See Note2
+| 0    |  7      | P9_25     | GPIO3_21    | mcasp0_ahclkx | Mode_6 |
+| 0    | 14      | P8_16     | GPIO1_14    | gpmc_ad14     | Mode_6 |
+| 0    | 15      | P8_15     | GPIO1_15    | gpmc_ad15     | Mode_6 |
+| 0    | 16      | P9_24     | UART1_TXD   | uart1_txd     | Mode_6 |
+| 1    | 12      | P8_21     | GPIO1_30    | gpmc_csn1     | Mode_6 |
+| 1    | 13      | P8_20     | GPIO1_31    | gpmc_csn2     | Mode_6 |
+| 1    | 16      | P9_26     | UART1_RXD   | uart1_rxd     | Mode_6 |
+|===
+
+=== Camera module
+
+ifdef::env-github[]
+image::cam-module-signals.svg[]
+endif::[]
+
+ifndef::env-github[]
+[wavedrom]
+....
+{ signal: [
+  { name: "clk",         wave: "p.....|..." },
+  { name: "Data",        wave: "x.345x|=.x", data: ["head", "body", "tail", "data"] },
+  { name: "Request",     wave: "0.1..0|1.0" },
+  {},
+  { name: "Acknowledge", wave: "1.....|01." }
+]}
+....
+endif::[]
 
 
 == Build process
 
+=== Host setup
+
+TODO: using Ubuntu 20.04
+
+=== Get project sources
+
+Let's assume the project location will be `{PROJECT_DIR}`.
+TODO: git clone or raw download
+
 === Toolchain
+
 === Rootfs
+
+==== Install buildroot
+
+[source,sh,subs="attributes+"]
+$ mkdir {PROJECT_DIR}/output && cd {PROJECT_DIR}/output
+$ BR_VER=2021.02.1
+$ curl -O https://buildroot.org/downloads/buildroot-${BR_VER}.tar.bz2
+$ tar -xf buildroot-${BR_VER}.tar.bz2
+$ ln -s buildroot-${BR_VER} buildroot
+
+
 === U-Boot
+
 === Linux kernel
+
 === Arduino
 
 
@@ -58,3 +165,10 @@ procedure
 == Further development
 
 TODO: describe future work and possible improvements
+
+
+[bibliography]
+== References
+
+* [[[RefBeagleBoneBlack,1]]] BeagleBone Black product page: https://beagleboard.org/black
+* [[[RefAm33xxPrussv2,2]]] Ti AM33XX PRUSSv2: https://elinux.org/Ti_AM33XX_PRUSSv2
