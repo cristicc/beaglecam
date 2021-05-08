@@ -34,7 +34,7 @@ TODO: describe overall solution
 === Overview
 
 [ditaa]
-....
+----
              +----------------------------------------+
              |           BEAGLEBONE BLACK             |
              |                                        |
@@ -56,7 +56,7 @@ TODO: describe overall solution
      +-----------------------------------+            |
              |                                        |
              +----------------------------------------+
-....
+----
 
 === BeagleBone Black
 
@@ -113,7 +113,7 @@ endif::[]
 
 ifndef::env-github[]
 [wavedrom]
-....
+----
 { signal: [
   { name: "clk",         wave: "p.....|..." },
   { name: "Data",        wave: "x.345x|=.x", data: ["head", "body", "tail", "data"] },
@@ -121,7 +121,7 @@ ifndef::env-github[]
   {},
   { name: "Acknowledge", wave: "1.....|01." }
 ]}
-....
+----
 endif::[]
 
 
