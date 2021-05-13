@@ -1,0 +1,15 @@
+UBOOT_MAKE_OPTS += \
+	CROSS_COMPILE="$(TARGET_CROSS)" \
+	ARCH=$(UBOOT_ARCH) \
+	HOSTCC="$(HOSTCC) $(subst -I/,-isystem /,$(subst -I /,-isystem /,$(HOST_CFLAGS)))" \
+	HOSTLDFLAGS="$(HOST_LDFLAGS)" \
+	$(call qstrip,$(BR2_TARGET_UBOOT_CUSTOM_MAKEOPTS))
+
+define U_BOOT_BUILD_CMDS
+	$(if $(UBOOT_CUSTOM_DTS_PATH),
+		cp -f $(UBOOT_CUSTOM_DTS_PATH) $(@D)/arch/$(UBOOT_ARCH)/dts/
+	)
+	$(TARGET_CONFIGURE_OPTS) \
+		$(UBOOT_MAKE) -C $(@D) $(UBOOT_MAKE_OPTS) \
+		$(UBOOT_MAKE_TARGET)
+endef

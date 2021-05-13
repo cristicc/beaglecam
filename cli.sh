@@ -58,7 +58,7 @@ config_rootfs_cmd() {
 
     mkdir -p "${ROOTFS_BUILD_DIR}" \
     && make BR2_EXTERNAL="${BUILDROOT_EXTERNAL_DIR}" O="${ROOTFS_BUILD_DIR}" \
-        -C "${BUILDROOT_DIR}" defconfig beaglecam_defconfig
+        -C "${BUILDROOT_DIR}" beaglecam_defconfig
 }
 
 build_rootfs_cmd() {
