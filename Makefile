@@ -1,7 +1,7 @@
 #
-# Makefile for BeagleCam Project
+# Makefile for BeagleCam project
 #
-# Inspired from Buildroot's Makefile:
+# Inspired from Buildroot's make infrastructure:
 # https://git.busybox.net/buildroot/tree/Makefile
 #
 # Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
@@ -30,18 +30,21 @@ $(if $(OUTPUT_DIR),, $(error output directory "$(OUTPUT_DIR)" does not exist))
 
 # Set common paths.
 BUILD_DIR := $(OUTPUT_DIR)/build
-BUILD_CONFIG := $(OUTPUT_DIR)/.config
 DOWNLOAD_DIR := $(OUTPUT_DIR)/downloads
 BINARIES_DIR := $(OUTPUT_DIR)/binaries
 
 # Absolute path to project root directory.
 ROOT_DIR := $(realpath $(CURDIR))
 
+# Project configuration files.
+PRJ_DEFCONFIG := $(ROOT_DIR)/prj.config
+PRJ_DOTCONFIG := $(OUTPUT_DIR)/.config
+
 # Set default goal.
 .PHONY: all
 all:
 
-# List of targets and target patterns for which .config doesn't need to be read in
+# List of targets for which PRJ_DOTCONFIG doesn't need to be read in.
 noconfig_targets := clean distclean help
 
 #
@@ -54,16 +57,19 @@ noconfig_targets := clean distclean help
 # is to build), or when MAKECMDGOALS contains something not in nobuild_targets.
 #
 nobuild_targets := $(noconfig_targets) \
-	show-targets %-show-depends %-show-version config
+	config reconfig %-show-depends %-show-version
+
 ifeq ($(MAKECMDGOALS),)
   BR_BUILDING = y
 else ifneq ($(filter-out $(nobuild_targets),$(MAKECMDGOALS)),)
   BR_BUILDING = y
 endif
 
-# Pull in the user's configuration file.
+# Pull in the user's configuration file. Note that make will attempt to rebuild
+# the included file if it doesn't exist. If it is successfully rebuilt, make
+# will re-execute itself to read the new version.
 ifeq ($(filter $(noconfig_targets),$(MAKECMDGOALS)),)
--include $(BUILD_CONFIG)
+-include $(PRJ_DOTCONFIG)
 endif
 
 # Avoid passing O=<dir> option for out-of-tree builds when calling make
@@ -120,6 +126,10 @@ ifneq ($(DEFAULT_BUILD_TARGET),)
 all: $(DEFAULT_BUILD_TARGET)
 endif
 
+.PHONY: update-config
+update-config:
+	cp -a $(PRJ_DOTCONFIG) $(PRJ_DEFCONFIG)
+
 # Setup build environment.
 include util/setup-env.mk
 
@@ -134,13 +144,9 @@ include $(sort $(wildcard component/*/*.mk))
 
 else # $(PRJ_HAVE_DOT_CONFIG)
 
-# Some subdirectories are also package names. To avoid that "make linux"
-# on an unconfigured tree produces "Nothing to be done", add an explicit
-# rule for it.
-# Also for 'all' we error out and ask the user to configure first.
-.PHONY: linux toolchain
-linux toolchain all:
-	$(error Please configure project first (i.e. "make config"))
+.PHONY: update-config
+all update-config:
+	$(error Invalid or missing project configuration; try "make reconfig")
 	@exit 1
 
 endif # $(PRJ_HAVE_DOT_CONFIG)
@@ -148,18 +154,22 @@ endif # $(PRJ_HAVE_DOT_CONFIG)
 $(BUILD_DIR) $(BINARIES_DIR):
 	$(Q)mkdir -p "$@"
 
-$(BUILD_CONFIG):
+$(PRJ_DOTCONFIG): | $(BUILD_DIR) $(BINARIES_DIR)
 	$(Q)mkdir -p "$(@D)"
 # Generate a Makefile in the output directory, if using a custom output
 # directory. This allows convenient use of make in the output directory.
 ifeq ($(OUTOFTREE_BUILD),y)
 	$(Q)$(ROOT_DIR)/util/gen-make-wrapper.sh $(ROOT_DIR) $(OUTPUT_DIR)
 endif
-	$(Q)cp -a $(ROOT_DIR)/prj_defconfig $@
+	cp -a $(PRJ_DEFCONFIG) $@
 
 .PHONY: config
-config: $(BUILD_CONFIG) | $(BUILD_DIR) $(BINARIES_DIR)
+config: $(PRJ_DOTCONFIG)
 	@:
+
+.PHONY: reconfig
+reconfig:
+	rm -f $(PRJ_DOTCONFIG)
 
 .PHONY: clean
 clean:
@@ -177,6 +187,9 @@ help:
 		'  O=DIR                  Create all output artifacts in DIR'. \
 		'' \
 		'Common targets:' \
+		'  config                 Configure project using "$(notdir $(PRJ_DEFCONFIG))" (handled automatically).' \
+		'  reconfig               Force project configure step.' \
+		'  update-config          Copy build "$(notdir $(PRJ_DOTCONFIG))" back to "$(notdir $(PRJ_DEFCONFIG))".' \
 		'  all                    Build project.' \
 		'  clean                  Delete all files created by build.' \
 		'  distclean              Delete all non-source files (including downloads).' \

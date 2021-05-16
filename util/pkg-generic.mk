@@ -245,14 +245,8 @@ $$($(2)_TARGET_CONFIGURE):		| $$($(2)_FINAL_DEPENDENCIES)
 
 ifeq ($$(strip $$($(2)_SITE)$$($(2)_SOURCE)),)
 # In case of packages without source code (e.g. br-target), only the
-# configure step is considered.
-$$($(2)_TARGET_CONFIGURE):		| $(1)-source
-
+# target dependencies are managed at this level.
 $(1)-depends:					$$($(2)_FINAL_DEPENDENCIES)
-
-#TODO: is this needed?
-#$(1)-source:
-#	$$(Q)mkdir -p $$($(2)_DIR)
 
 else ifneq ($$($(2)_OVERRIDE_SRCDIR),)
 # In the package override case, the sequence of steps is:

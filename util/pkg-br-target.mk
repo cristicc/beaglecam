@@ -1,15 +1,11 @@
 #
-# This file implements an infrastructure to support building complex components
-# via buildroot targets.
+# This file implements an infrastructure to support building components via
+# buildroot targets.
 #
 # In terms of implementation, the component specific .mk file should specify
-# only the name of the defconfig file via $(PKG)_CONFIG.
+# only the path of the buildroot defconfig file via $(PKG)_KCONFIG_FILE.
 #
-# If it resides in an br2-external tree specified via $(PKG)_BR2EXT_DIR),
-# only  the basename shall be provided (i.e. with the 'br2-ext/configs/' prefix
-# removed). Otherwise, use the path relative to the package source directory.
-#
-# Additionally, in the config file, you may use BASE_DIR to refer to the
+# Additionally, in the defconfig file, you may use BASE_DIR to refer to the
 # component build directory $(PKG)_BUILDDIR.
 #
 
@@ -21,36 +17,34 @@
 #
 define buildroot-component-helper
 
+$(2)_MAKE					?= $$(MAKE)
+$(2)_MAKE_ENV				+= BR2_DL_DIR=$$(DOWNLOAD_DIR)
+$(2)_MAKE_OPTS				?=
+
+$(2)_KCONFIG_OPTS			?= -C $$(BUILDROOT_BUILDDIR) \
+	O=$$($(2)_BUILDDIR) BR2_DL_DIR=$$(DOWNLOAD_DIR) \
+	$$(if $$($(2)_BR2EXT_DIR),BR2_EXTERNAL=$$($(2)_BR2EXT_DIR))
+
+# This is a buildroot target, hence add buildroot to the list of dependencies.
+$(2)_KCONFIG_DEPENDENCIES += buildroot
+
+# Buildroot external dir.
+$(2)_BR2EXT_DIR				?=
+
 # Explicitly set these so we do not get confused by environment
 # variables with the same names.
 $(2)_VERSION =
 $(2)_SOURCE =
 
-# This is a buildroot target, hence add buildroot to the list of dependencies.
-$(2)_DEPENDENCIES += buildroot
-
-# Configure step. Only define it if not already defined by the package .mk file.
-ifndef $(2)_CONFIGURE_CMDS
-# Configure package for target
-define $(2)_CONFIGURE_CMDS
-	$$(MAKE1) \
-		$$(if $$($$(PKG)_BR2EXT_DIR),BR2_EXTERNAL=$$($$(PKG)_BR2EXT_DIR)) \
-		O=$$($$(PKG)_BUILDDIR) \
-		BR2_DL_DIR=$$(DOWNLOAD_DIR) \
-		-C $$(BUILDROOT_SRCDIR) \
-		$$(if $$($$(PKG)_BR2EXT_DIR),,defconfig BR2_DEFCONFIG=$$($$(PKG)_PKGDIR))$$($$(PKG)_CONFIG)
-endef
-endif
-
 # Build step. Only define it if not already defined by the package .mk file.
 ifndef $(2)_BUILD_CMDS
 define $(2)_BUILD_CMDS
-	$$(MAKE1) -C $$($$(PKG)_BUILDDIR)
+	$$($$(PKG)_MAKE_ENV) $$($$(PKG)_MAKE) $$($$(PKG)_MAKE_OPTS) -C $$($$(PKG)_BUILDDIR)
 endef
 endif
 
-# Call the generic package infra to generate the necessary make targets.
-$(call generic-component-helper,$(1),$(2))
+# Call the kconfig package infra to generate the necessary make targets.
+$(call kconfig-component-helper,$(1),$(2))
 
 endef
 

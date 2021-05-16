@@ -5,8 +5,7 @@ LINUX_SITE = https://cdn.kernel.org/pub/linux/kernel/v$(firstword $(subst ., ,$(
 # Starting with 4.18, the kconfig in the kernel calls the
 # cross-compiler to check its capabilities. So we need the
 # toolchain before we can call the configurators.
-#TODO: uncomment
-#LINUX_KCONFIG_DEPENDENCIES += toolchain
+LINUX_KCONFIG_DEPENDENCIES += toolchain
 
 LINUX_MAKE_ENV = \
 	BR_BINARIES_DIR=$(BINARIES_DIR)
@@ -58,9 +57,9 @@ endif
 
 LINUX_IMAGE_PATH = $(LINUX_ARCH_PATH)/boot/$(LINUX_IMAGE_NAME)
 
-# Standard defconfig file.
+# Name of a defconfig make rule.
 LINUX_KCONFIG_DEFCONFIG = $(call qstrip,$(PRJ_LINUX_KERNEL_DEFCONFIG))
-# Custom (def)config file.
+# Path to a defconfig or full-config file.
 LINUX_KCONFIG_FILE = $(call qstrip,$(PRJ_LINUX_KERNEL_CUSTOM_CONFIG_FILE))
 
 LINUX_KCONFIG_FRAGMENT_FILES = $(call qstrip,$(PRJ_LINUX_KERNEL_CONFIG_FRAGMENT_FILES))

@@ -23,9 +23,7 @@ define kconfig-package-update-config
 	$(Q)touch --reference $($(PKG)_DIR)/$($(PKG)_KCONFIG_STAMP_DOTCONFIG) $($(PKG)_KCONFIG_FILE)
 endef
 
-#TODO: need this?
-#PKG_KCONFIG_COMMON_OPTS = \
-#	HOSTCC="$(HOSTCC_NOCCACHE)"
+PKG_KCONFIG_COMMON_OPTS =
 
 # Macro to save the defconfig file
 # $(1): the name of the package in upper-case letters
