@@ -50,7 +50,7 @@ TERM_RESET := $(shell tput rmso 2>/dev/null)
 # Helper functions to determine the name of a package and its directory from
 # its makefile directory. Currently used by the generic-component macro to
 # automagically find where the component is located.
-pkgdir = $(dir $(lastword $(MAKEFILE_LIST)))
+pkgdir = $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 pkgname = $(lastword $(subst /, ,$(pkgdir)))
 
 # Sanitize macro cleans up generic strings so it can be used as a filename

@@ -22,19 +22,19 @@ $(2)_MAKE_ENV				+= BR2_DL_DIR=$$(DOWNLOAD_DIR)
 $(2)_MAKE_OPTS				?=
 
 $(2)_KCONFIG_OPTS			?= -C $$(BUILDROOT_BUILDDIR) \
-	O=$$($(2)_BUILDDIR) BR2_DL_DIR=$$(DOWNLOAD_DIR) \
+	O=$$($(2)_BUILDDIR) \
 	$$(if $$($(2)_BR2EXT_DIR),BR2_EXTERNAL=$$($(2)_BR2EXT_DIR))
 
 # This is a buildroot target, hence add buildroot to the list of dependencies.
-$(2)_KCONFIG_DEPENDENCIES += buildroot
+$(2)_KCONFIG_DEPENDENCIES	+= buildroot
 
 # Buildroot external dir.
 $(2)_BR2EXT_DIR				?=
 
 # Explicitly set these so we do not get confused by environment
 # variables with the same names.
-$(2)_VERSION =
-$(2)_SOURCE =
+$(2)_VERSION				=
+$(2)_SOURCE					=
 
 # Build step. Only define it if not already defined by the package .mk file.
 ifndef $(2)_BUILD_CMDS

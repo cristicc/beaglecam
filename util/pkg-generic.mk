@@ -244,9 +244,16 @@ $(1)-configure:					$$($(2)_TARGET_CONFIGURE)
 $$($(2)_TARGET_CONFIGURE):		| $$($(2)_FINAL_DEPENDENCIES)
 
 ifeq ($$(strip $$($(2)_SITE)$$($(2)_SOURCE)),)
-# In case of packages without source code (e.g. br-target), only the
-# target dependencies are managed at this level.
+# In case of packages without source code, assuming a br-target sequence:
+# - depends
+#
+
 $(1)-depends:					$$($(2)_FINAL_DEPENDENCIES)
+
+$(1)-patch:
+$(1)-extract:
+$(1)-source:
+$(1)-external-deps:
 
 else ifneq ($$($(2)_OVERRIDE_SRCDIR),)
 # In the package override case, the sequence of steps is:

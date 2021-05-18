@@ -1,2 +1,2 @@
-name: BEAGLECAM
-desc: BeagleCam br2-external tree
+name: BEAGLECAM_ROOTFS
+desc: BeagleCam rootfs br2-external tree
