@@ -120,12 +120,6 @@ PACKAGES_ALL :=
 # Silent mode requested?
 QUIET := $(if $(findstring s,$(filter-out --%,$(MAKEFLAGS))),-q)
 
-# Set default build target.
-DEFAULT_BUILD_TARGET := $(call qstrip,$(PRJ_DEFAULT_BUILD_TARGET))
-ifneq ($(DEFAULT_BUILD_TARGET),)
-all: $(DEFAULT_BUILD_TARGET)
-endif
-
 .PHONY: update-config
 update-config:
 	cp -a $(PRJ_DOTCONFIG) $(PRJ_DEFCONFIG)

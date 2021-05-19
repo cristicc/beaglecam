@@ -79,6 +79,8 @@ endif
 TAR ?= tar
 TAR_OPTIONS = $(call qstrip,$(PRJ_TAR_OPTIONS)) -xf
 
+SED := $(shell which sed || type -p sed) -i -e
+
 INSTALL := $(shell which install || type -p install)
 UNZIP := $(shell which unzip || type -p unzip) -q
 

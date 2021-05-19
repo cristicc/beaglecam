@@ -43,6 +43,13 @@ define $(2)_BUILD_CMDS
 endef
 endif
 
+# Install step. Only define it if not already defined by the package .mk file.
+ifndef $(2)_INSTALL_CMDS
+define $(2)_INSTALL_CMDS
+	cp -a $$($$(PKG)_BUILDDIR)/images/* $$(BINARIES_DIR)/ >/dev/null 2>&1 || true
+endef
+endif
+
 # Call the kconfig package infra to generate the necessary make targets.
 $(call kconfig-component-helper,$(1),$(2))
 
