@@ -1,6 +1,6 @@
 LINUX_VERSION = $(call qstrip,$(PRJ_LINUX_KERNEL_VERSION))
-LINUX_SOURCE = linux-$(LINUX_VERSION).tar.xz
 LINUX_SITE = https://cdn.kernel.org/pub/linux/kernel/v$(firstword $(subst ., ,$(LINUX_VERSION))).x
+LINUX_SOURCE = linux-$(LINUX_VERSION).tar.xz
 
 # Starting with 4.18, the kconfig in the kernel calls the
 # cross-compiler to check its capabilities. So we need the

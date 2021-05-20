@@ -57,7 +57,7 @@ noconfig_targets := clean distclean help
 # is to build), or when MAKECMDGOALS contains something not in nobuild_targets.
 #
 nobuild_targets := $(noconfig_targets) \
-	config reconfig %-show-depends %-show-version
+	configure reconfigure %-show-depends %-show-version
 
 ifeq ($(MAKECMDGOALS),)
   BR_BUILDING = y
@@ -192,7 +192,7 @@ help:
 		'  GPKG                   Build GPKG and all its dependencies.' \
 		'  GPKG-extract           Extract GPKG sources.' \
 		'  GPKG-patch             Apply patches to GPKG.' \
-		'  GPKG-depends           Build GPKG'\''s dependencies.' \
+		'  GPKG-depends           Build GPKG dependencies.' \
 		'  GPKG-configure         Build GPKG up to the configure step.' \
 		'  GPKG-build             Build GPKG up to the build step.' \
 		'  GPKG-show-depends      List packages on which GPKG depends.' \
