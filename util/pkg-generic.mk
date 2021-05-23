@@ -244,7 +244,7 @@ $(1)-configure:					$$($(2)_TARGET_CONFIGURE)
 $$($(2)_TARGET_CONFIGURE):		| $$($(2)_FINAL_DEPENDENCIES)
 
 ifeq ($$(strip $$($(2)_SITE)$$($(2)_SOURCE)),)
-# In case of packages without source code, assuming a br-target sequence:
+# In case of packages without source code, assuming a br-target step sequence:
 # - depends
 #
 

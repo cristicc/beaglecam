@@ -157,12 +157,12 @@ ifeq ($(OUTOFTREE_BUILD),y)
 endif
 	cp -a $(PRJ_DEFCONFIG) $@
 
-.PHONY: config
-config: $(PRJ_DOTCONFIG)
+.PHONY: configure
+configure: $(PRJ_DOTCONFIG)
 	@:
 
-.PHONY: reconfig
-reconfig:
+.PHONY: reconfigure
+reconfigure:
 	rm -f $(PRJ_DOTCONFIG)
 
 .PHONY: clean
@@ -181,8 +181,8 @@ help:
 		'  O=DIR                  Create all output artifacts in DIR'. \
 		'' \
 		'Common targets:' \
-		'  config                 Configure project using "$(notdir $(PRJ_DEFCONFIG))" (handled automatically).' \
-		'  reconfig               Force project configure step.' \
+		'  configure              Configure project using "$(notdir $(PRJ_DEFCONFIG))" (handled automatically).' \
+		'  reconfigure            Force project configure step.' \
 		'  update-config          Copy build "$(notdir $(PRJ_DOTCONFIG))" back to "$(notdir $(PRJ_DEFCONFIG))".' \
 		'  all                    Build project.' \
 		'  clean                  Delete all files created by build.' \
@@ -203,6 +203,7 @@ help:
 		'  GPKG-dirclean          Remove GPKG build directory.' \
 		'  GPKG-reconfigure       Restart the build from the configure step.' \
 		'  GPKG-rebuild           Redo the build step.' \
+		'  GPKG-reinstall         Redo the install step.' \
 		'' \
 		'Kconfig package build targets:' \
 		'  KPKG-menuconfig        Call KPKG menuconfig target.' \

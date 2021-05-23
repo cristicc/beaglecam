@@ -57,9 +57,7 @@ endif
 
 LINUX_IMAGE_PATH = $(LINUX_ARCH_PATH)/boot/$(LINUX_IMAGE_NAME)
 
-# Name of a defconfig make rule.
 LINUX_KCONFIG_DEFCONFIG = $(call qstrip,$(PRJ_LINUX_KERNEL_DEFCONFIG))
-# Path to a defconfig or full-config file.
 LINUX_KCONFIG_FILE = $(call qstrip,$(PRJ_LINUX_KERNEL_CUSTOM_CONFIG_FILE))
 
 LINUX_KCONFIG_FRAGMENT_FILES = $(call qstrip,$(PRJ_LINUX_KERNEL_CONFIG_FRAGMENT_FILES))
@@ -73,6 +71,15 @@ LINUX_NEEDS_MODULES ?= $(PRJ_LINUX_NEEDS_MODULES)
 define LINUX_KCONFIG_FIXUP_CMDS
 	$(if $(LINUX_NEEDS_MODULES),
 		$(call KCONFIG_ENABLE_OPT,CONFIG_MODULES))
+	# As the kernel gets compiled before root filesystems are built, we create a
+	# fake cpio file. It'll be replaced later by the real cpio archive, and the
+	# kernel will be rebuilt using the linux-rebuild-with-initramfs target.
+	$(if $(PRJ_LINUX_KERNEL_APPENDED_INITRAMFS),
+		mkdir -p $(ROOTFS_BUILDDIR)
+		touch $(BINARIES_DIR)/rootfs.cpio
+		$(call KCONFIG_SET_OPT,CONFIG_INITRAMFS_SOURCE,"$${BR_BINARIES_DIR}/rootfs.cpio")
+		$(call KCONFIG_SET_OPT,CONFIG_INITRAMFS_ROOT_UID,0)
+		$(call KCONFIG_SET_OPT,CONFIG_INITRAMFS_ROOT_GID,0))
 	$(call KCONFIG_DISABLE_OPT,CONFIG_GCC_PLUGINS)
 	$(PACKAGES_LINUX_CONFIG_FIXUPS)
 endef
@@ -83,7 +90,7 @@ define LINUX_BUILD_DTB
 endef
 ifeq ($(PRJ_LINUX_KERNEL_APPENDED_DTB),)
 define LINUX_INSTALL_DTB
-	# dtbs moved from arch/<ARCH>/boot to arch/<ARCH>/boot/dts since 3.8-rc1
+# dtbs moved from arch/<ARCH>/boot to arch/<ARCH>/boot/dts since 3.8-rc1
 	$(foreach dtb,$(LINUX_DTBS), \
 		install -D \
 			$(or $(wildcard $(LINUX_ARCH_PATH)/boot/dts/$(dtb)),$(LINUX_ARCH_PATH)/boot/$(dtb)) \
@@ -156,24 +163,17 @@ define LINUX_INSTALL_IMAGE
 endef
 endif
 
-define LINUX_INSTALL_CMDS
-	$(call LINUX_INSTALL_IMAGE,$(BINARIES_DIR))
-	$(call LINUX_INSTALL_DTB,$(BINARIES_DIR))
-endef
-
 ifeq ($(PRJ_STRIP),y)
 LINUX_MAKE_FLAGS += INSTALL_MOD_STRIP=1
 endif
 
-#TODO: define options in project defconfig
-define LINUX_INSTALL_TARGET_CMDS
-	$(LINUX_INSTALL_KERNEL_IMAGE_TO_TARGET)
-	# Install modules and remove symbolic links pointing to build
-	# directories, not relevant on the target
-	@if grep -q "CONFIG_MODULES=y" $(@D)/.config; then \
+# Install modules and remove symbolic links pointing to build
+# directories, not relevant on the target.
+define LINUX_INSTALL_MODULES
+	if grep -q "CONFIG_MODULES=y" $(@D)/.config; then \
 		$(LINUX_MAKE_ENV) $(MAKE1) $(LINUX_MAKE_FLAGS) -C $(@D) modules_install; \
-		rm -f $(TARGET_DIR)/lib/modules/$(LINUX_VERSION_PROBED)/build ; \
-		rm -f $(TARGET_DIR)/lib/modules/$(LINUX_VERSION_PROBED)/source ; \
+		rm -f $(BINARIES_DIR)/lib/modules/$(LINUX_VERSION_PROBED)/build ; \
+		rm -f $(BINARIES_DIR)/lib/modules/$(LINUX_VERSION_PROBED)/source ; \
 	fi
 endef
 
@@ -182,19 +182,24 @@ endef
 define LINUX_RUN_DEPMOD
 	if test -d $(BINARIES_DIR)/lib/modules/$(LINUX_VERSION_PROBED) \
 		&& grep -q "CONFIG_MODULES=y" $(LINUX_DIR)/.config; then \
-		$(HOST_DIR)/sbin/depmod -a -b $(BINARIES_DIR) $(LINUX_VERSION_PROBED); \
+		depmod -a -b $(BINARIES_DIR) $(LINUX_VERSION_PROBED); \
 	fi
 endef
-LINUX_TARGET_FINALIZE_HOOKS += LINUX_RUN_DEPMOD
+
+define LINUX_INSTALL_CMDS
+	$(call LINUX_INSTALL_IMAGE,$(BINARIES_DIR))
+	$(call LINUX_INSTALL_DTB,$(BINARIES_DIR))
+	$(LINUX_INSTALL_MODULES)
+	$(LINUX_RUN_DEPMOD)
+endef
 
 $(eval $(kconfig-component))
 
 # Support for rebuilding the kernel after the cpio archive has
 # been generated.
 .PHONY: linux-rebuild-with-initramfs
-linux-rebuild-with-initramfs: $(LINUX_DIR)/.stamp_target_installed
-linux-rebuild-with-initramfs: $(LINUX_DIR)/.stamp_images_installed
-linux-rebuild-with-initramfs: rootfs-cpio
+linux-rebuild-with-initramfs: $(LINUX_DIR)/.stamp_installed
+linux-rebuild-with-initramfs: rootfs
 linux-rebuild-with-initramfs:
 	@$(call MESSAGE,"Rebuilding kernel with initramfs")
 	# Build the kernel.
