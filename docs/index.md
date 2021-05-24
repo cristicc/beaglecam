@@ -1,6 +1,7 @@
 ## Booting Linux on BeagleBone Black in less than 3 seconds
 
-The main purpose of this work is to optimize the Linux kernel boot time, measured using an Arduino Nano 33 BLE board driving an alphanumeric LCD display via I2C.
+The main purpose of this work is to optimize the Linux kernel boot time, measured
+using an Arduino Nano 33 BLE board driving an alphanumeric LCD display via I2C.
 
 IMPORTANT: This is work in progress!
 
@@ -19,12 +20,12 @@ IMPORTANT: This is work in progress!
 ![Camera module signals](img/cam-module-signals.svg)
 
 
-### Build process
+### Building sources
 
-- Buildroot
+- Commands
 
 ```shell
-$ curl -O https://buildroot.org/downloads/buildroot-${BR_VER}.tar.bz2
-$ tar -xf buildroot-${BR_VER}.tar.bz2
-$ ln -s buildroot-${BR_VER} buildroot
+$ make O=/path/to/custom/output/dir config
+$ cd /path/to/custom/output/dir
+$ make
 ```
