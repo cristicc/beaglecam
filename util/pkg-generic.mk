@@ -245,8 +245,13 @@ $$($(2)_TARGET_CONFIGURE):		| $$($(2)_FINAL_DEPENDENCIES)
 
 ifeq ($$(strip $$($(2)_SITE)$$($(2)_SOURCE)),)
 # In case of packages without source code, assuming a br-target step sequence:
+# - build dir creation
 # - depends
 #
+$$($(2)_TARGET_CONFIGURE):		| $$($(2)_DIR)
+
+$$($(2)_DIR):
+	$$(Q)mkdir -p $$@
 
 $(1)-depends:					$$($(2)_FINAL_DEPENDENCIES)
 
@@ -314,10 +319,10 @@ $(1)-show-depends:
 	@echo $$($(2)_FINAL_ALL_DEPENDENCIES)
 
 $(1)-show-recursive-depends:
-			@echo $$($(2)_FINAL_RECURSIVE_DEPENDENCIES)
+	@echo $$($(2)_FINAL_RECURSIVE_DEPENDENCIES)
 
 $(1)-show-recursive-rdepends:
-			@echo $$($(2)_FINAL_RECURSIVE_RDEPENDENCIES)
+	@echo $$($(2)_FINAL_RECURSIVE_RDEPENDENCIES)
 
 $(1)-show-build-order:			$$(patsubst %,%-show-build-order,$$($(2)_FINAL_ALL_DEPENDENCIES))
 	@:
@@ -333,15 +338,21 @@ endif
 
 $(1)-reinstall:					$(1)-clean-for-reinstall $(1)
 
+$(1)-reinstall-all:				$$(patsubst %,%-clean-for-reinstall,$$($(2)_FINAL_ALL_DEPENDENCIES)) $(1)-reinstall
+
 $(1)-clean-for-rebuild:			$(1)-clean-for-reinstall
 	rm -f $$($(2)_TARGET_BUILD)
 
 $(1)-rebuild:					$(1)-clean-for-rebuild $(1)
 
+$(1)-rebuild-all:				$$(patsubst %,%-clean-for-rebuild,$$($(2)_FINAL_ALL_DEPENDENCIES)) $(1)-rebuild
+
 $(1)-clean-for-reconfigure: 	$(1)-clean-for-rebuild
 	rm -f $$($(2)_TARGET_CONFIGURE)
 
 $(1)-reconfigure:				$(1)-clean-for-reconfigure $(1)
+
+$(1)-reconfigure-all:			$$(patsubst %,%-clean-for-reconfigure,$$($(2)_FINAL_ALL_DEPENDENCIES)) $(1)-reconfigure
 
 # Define target local variables.
 $$($(2)_TARGET_INSTALL):		PKG=$(2)
@@ -381,8 +392,11 @@ TARGET_FINALIZE_HOOKS += $$($(2)_TARGET_FINALIZE_HOOKS)
 	$(1)-install \
 	$(1)-patch \
 	$(1)-rebuild \
+	$(1)-rebuild-all \
 	$(1)-reconfigure \
+	$(1)-reconfigure-all \
 	$(1)-reinstall \
+	$(1)-reinstall-all \
 	$(1)-rsync \
 	$(1)-show-depends \
 	$(1)-show-recursive-depends \
