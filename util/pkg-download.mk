@@ -1,8 +1,8 @@
 #
-# Helper to to handle downloads from HTTP servers, FTP servers,
+# Macros to handle downloads from HTTP servers, FTP servers,
 # Git repositories, Subversion repositories, and SCP servers.
 #
-# Based on Buildroot's generic package infrastructure:
+# Based on Buildroot's package infrastructure download support:
 # https://git.busybox.net/buildroot/tree/package/pkg-download.mk
 #
 
@@ -50,30 +50,15 @@ export BR_NO_CHECK_HASH_FOR =
 
 ################################################################################
 # DOWNLOAD_URIS - List the candidates URIs where to get the package from:
-# 1) BR2_PRIMARY_SITE if enabled
-# 2) Download site, unless BR2_PRIMARY_SITE_ONLY is set
-# 3) BR2_BACKUP_SITE if enabled, unless BR2_PRIMARY_SITE_ONLY is set
+# * Download site
 #
 # Argument 1 is the source location
 # Argument 2 is the upper-case package name
 #
 ################################################################################
 
-ifneq ($(call qstrip,$(BR2_PRIMARY_SITE)),)
-DOWNLOAD_URIS += \
-	$(call getschemeplusuri,$(call qstrip,$(BR2_PRIMARY_SITE)/$($(2)_DL_SUBDIR)),urlencode) \
-	$(call getschemeplusuri,$(call qstrip,$(BR2_PRIMARY_SITE)),urlencode)
-endif
-
-ifeq ($(BR2_PRIMARY_SITE_ONLY),)
 DOWNLOAD_URIS += \
 	$(patsubst %/,%,$(dir $(call qstrip,$(1))))
-ifneq ($(call qstrip,$(BR2_BACKUP_SITE)),)
-DOWNLOAD_URIS += \
-	$(call getschemeplusuri,$(call qstrip,$(BR2_BACKUP_SITE)/$($(2)_DL_SUBDIR)),urlencode) \
-	$(call getschemeplusuri,$(call qstrip,$(BR2_BACKUP_SITE)),urlencode)
-endif
-endif
 
 ################################################################################
 # DOWNLOAD -- Download helper. Will call DL_WRAPPER which will try to download

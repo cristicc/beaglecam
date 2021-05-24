@@ -1,6 +1,9 @@
 #
-# Makefile containing various utility functions used by the package
-# infrastructure, or by the packages themselves.
+# Makefile containing various utility macros and helper variables.
+#
+# Based on Buildroot's common utilities:
+# https://git.busybox.net/buildroot/tree/support/misc/utils.mk
+# https://git.busybox.net/buildroot/tree/package/pkg-utils.mk
 #
 
 # Strip quotes and then whitespaces
@@ -54,6 +57,3 @@ pkgname = $(lastword $(subst /, ,$(pkgdir)))
 # and in rules. Particularly useful for VCS version strings, that can contain
 # slashes, colons (OK in filenames but not in rules), and spaces.
 sanitize = $(subst $(space),_,$(subst :,_,$(subst /,_,$(strip $(1)))))
-
-# Macro to apply patches.
-APPLY_PATCHES = util/apply-patches.sh $(if $(QUIET),-s)

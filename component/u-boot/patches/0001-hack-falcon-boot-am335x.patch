@@ -1,0 +1,17 @@
+--- a/board/ti/am335x/board.c	2021-05-14 00:48:54.382508240 +0300
++++ b/board/ti/am335x/board.c	2021-05-14 00:49:12.769825861 +0300
+@@ -255,12 +255,14 @@ int spl_start_uboot(void)
+ 		return 1;
+ #endif
+ 
++/*
+ #ifdef CONFIG_SPL_ENV_SUPPORT
+ 	env_init();
+ 	env_load();
+ 	if (env_get_yesno("boot_os") != 1)
+ 		return 1;
+ #endif
++*/
+ 
+ 	return 0;
+ }

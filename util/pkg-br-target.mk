@@ -3,34 +3,42 @@
 # via buildroot targets.
 #
 # In terms of implementation, the component specific .mk file should specify
-# only the config file name that resides in a br2-external tree.
+# only the name of the defconfig file via $(PKG)_CONFIG.
+#
+# If it resides in an br2-external tree specified via $(PKG)_BR2EXT_DIR),
+# only  the basename shall be provided (i.e. with the 'br2-ext/configs/' prefix
+# removed). Otherwise, use the path relative to the package source directory.
+#
+# Additionally, in the config file, you may use BASE_DIR to refer to the
+# component build directory $(PKG)_BUILDDIR.
 #
 
 #
-# Generates the make targets needed to build a buildroot component.
+# Generates the make targets needed to support a buildroot component.
 #
 # Arg1: lowercase component name
 # Arg2: uppercase component name
 #
-define br-component-helper
+define buildroot-component-helper
 
 # Explicitly set these so we do not get confused by environment
 # variables with the same names.
 $(2)_VERSION =
 $(2)_SOURCE =
 
-# This is a buildroot target, hence add buildroot to the list of dependencies
-# and mark the package as not being dependant on toolchain.
+# This is a buildroot target, hence add buildroot to the list of dependencies.
 $(2)_DEPENDENCIES += buildroot
-$(2)_ADD_TOOLCHAIN_DEPENDENCY = NO
 
 # Configure step. Only define it if not already defined by the package .mk file.
 ifndef $(2)_CONFIGURE_CMDS
 # Configure package for target
 define $(2)_CONFIGURE_CMDS
-	$$(MAKE1) BR2_EXTERNAL=$$($$(PKG)_PKGDIR) O=$$($$(PKG)_BUILDDIR) \
+	$$(MAKE1) \
+		$$(if $$($$(PKG)_BR2EXT_DIR),BR2_EXTERNAL=$$($$(PKG)_BR2EXT_DIR)) \
+		O=$$($$(PKG)_BUILDDIR) \
 		BR2_DL_DIR=$$(DOWNLOAD_DIR) \
-		-C $$(BUILDROOT_SRCDIR) $$($$(PKG)_CONFIG)
+		-C $$(BUILDROOT_SRCDIR) \
+		$$(if $$($$(PKG)_BR2EXT_DIR),,defconfig BR2_DEFCONFIG=$$($$(PKG)_PKGDIR))$$($$(PKG)_CONFIG)
 endef
 endif
 
@@ -47,4 +55,4 @@ $(call generic-component-helper,$(1),$(2))
 endef
 
 # The target generator macro for buildroot target components.
-br-component = $(call br-component-helper,$(pkgname),$(call UPPERCASE,$(pkgname)))
+buildroot-component = $(call buildroot-component-helper,$(pkgname),$(call UPPERCASE,$(pkgname)))

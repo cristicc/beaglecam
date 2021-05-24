@@ -14,7 +14,7 @@
 # If anything goes wrong, we just remove all the temporaries
 # created so far.
 #
-# Based on Buildroot's generic package infrastructure:
+# Based on Buildroot's package infrastructure download support:
 # https://git.busybox.net/buildroot/tree/support/download/dl-wrapper
 #
 
@@ -25,7 +25,7 @@ export BR_BACKEND_DL_GETOPTS=":hc:d:o:n:N:H:ru:qf:e"
 
 main() {
     local OPT OPTARG
-    local backend output hfile recurse quiet
+    local backend output hfile recurse quiet rc
     local -a uris
 
     # Parse our options; anything after '--' is for the backend
@@ -53,11 +53,28 @@ main() {
         error "no output specified, use -o\n"
     fi
 
-    [ -e "${output}" ] && exit 0
+    # If the output file already exists and:
+    # - there's no .hash file: do not download it again and exit promptly
+    # - matches all its hashes: do not download it again and exit promptly
+    # - fails at least one of its hashes: force a re-download
+    # - there's no hash (but a .hash file): consider it a hard error
+    if [ -e "${output}" ]; then
+        if util/download/check-hash ${quiet} "${hfile}" "${output}" "${output##*/}"; then
+            exit 0
+        elif [ ${?} -ne 2 ]; then
+            # Do not remove the file, otherwise it might get re-downloaded
+            # from a later location (i.e. primary -> upstream -> mirror).
+            # Do not print a message, check-hash already did.
+            exit 1
+        fi
+        rm -f "${output}"
+        warn "Re-downloading '%s'...\n" "${output##*/}"
+    fi
 
     # Look through all the uris that we were given to download the package
     # source
     download_and_check=0
+    rc=1
     for uri in "${uris[@]}"; do
         backend_urlencode="${uri%%+*}"
         backend="${backend_urlencode%|*}"
@@ -111,6 +128,21 @@ main() {
 
         # cd back to free the temp-dir, so we can remove it later
         cd "${OLDPWD}"
+
+        # Check if the downloaded file is sane, and matches the stored hashes
+        # for that file
+        if util/download/check-hash ${quiet} "${hfile}" "${tmpf}" "${output##*/}"; then
+            rc=0
+        else
+            if [ ${?} -ne 3 ]; then
+                rm -rf "${tmpd}"
+                continue
+            fi
+
+            # the hash file exists and there was no hash to check the file
+            # against
+            rc=1
+        fi
         download_and_check=1
         break
     done
@@ -166,7 +198,7 @@ main() {
         exit 1
     fi
 
-    return 0
+    return ${rc}
 }
 
 trace()  { local msg="${1}"; shift; printf "%s: ${msg}" "${my_name}" "${@}"; }

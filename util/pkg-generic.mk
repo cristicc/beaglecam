@@ -2,7 +2,7 @@
 # This file implements an infrastructure to support building generic
 # components via dedicated *.mk files.
 #
-# This is a simplified approach of Buildroot's generic package infrastructure:
+# Based on Buildroot's generic package infrastructure:
 # https://git.busybox.net/buildroot/tree/package/pkg-generic.mk
 #
 
@@ -81,17 +81,33 @@ $(BUILD_DIR)/%/.stamp_built::
 	$(foreach hook,$($(PKG)_POST_BUILD_HOOKS),$(call $(hook))$(sep))
 	$(Q)touch $@
 
+# Install
+$(BUILD_DIR)/%/.stamp_installed:
+	@$(call MESSAGE,"Installing to binaries directory")
+	$(foreach hook,$($(PKG)_PRE_INSTALL_HOOKS),$(call $(hook))$(sep))
+	+$($(PKG)_INSTALL_CMDS)
+	$(foreach hook,$($(PKG)_POST_INSTALL_HOOKS),$(call $(hook))$(sep))
+	$(Q)touch $@
+
 # Remove package sources
 $(BUILD_DIR)/%/.stamp_dircleaned:
 	rm -Rf $(@D)
 
 #
-# Generates the make targets needed to build a generic component.
+# Generates the make targets needed to support a generic component.
 #
 # Arg1: lowercase component name
 # Arg2: uppercase component name
 #
 define generic-component-helper
+
+# Ensure the package is only declared once, i.e. do not accept that a
+# package be re-defined by a br2-external tree.
+ifneq ($(call strip,$(filter $(1),$(PACKAGES_ALL))),)
+$$(error Package '$(1)' defined a second time in '$(pkgdir)'; \
+	previous definition was in '$$($(2)_PKGDIR)')
+endif
+PACKAGES_ALL += $(1)
 
 # Define component-specific variables.
 $(2)_NAME			= $(1)
@@ -136,6 +152,7 @@ $(2)_ALL_DOWNLOADS	= \
 		$$(if $$(findstring ://,$$(p)),$$(p),\
 			$$($(2)_SITE_METHOD)+$$($(2)_SITE)/$$(p)))
 
+ifneq ($(1),toolchain)
 # When a target package is a toolchain dependency set this variable to 'NO'
 # so the 'toolchain' dependency is not added to prevent a circular dependency.
 $(2)_ADD_TOOLCHAIN_DEPENDENCY ?= YES
@@ -143,28 +160,54 @@ $(2)_ADD_TOOLCHAIN_DEPENDENCY ?= YES
 ifeq ($$($(2)_ADD_TOOLCHAIN_DEPENDENCY),YES)
   $(2)_DEPENDENCIES += toolchain
 endif
+endif
 
 # Eliminate duplicates in dependencies
-$(2)_FINAL_DEPENDENCIES				= $$(sort $$($(2)_DEPENDENCIES))
-$(2)_FINAL_DOWNLOAD_DEPENDENCIES	= $$(sort $$($(2)_DOWNLOAD_DEPENDENCIES))
-$(2)_FINAL_EXTRACT_DEPENDENCIES		= $$(sort $$($(2)_EXTRACT_DEPENDENCIES))
-$(2)_FINAL_PATCH_DEPENDENCIES		= $$(sort $$($(2)_PATCH_DEPENDENCIES))
-$(2)_FINAL_ALL_DEPENDENCIES 		= \
+$(2)_FINAL_DEPENDENCIES			= $$(sort $$($(2)_DEPENDENCIES))
+$(2)_FINAL_DOWNLOAD_DEPENDENCIES = $$(sort $$($(2)_DOWNLOAD_DEPENDENCIES))
+$(2)_FINAL_EXTRACT_DEPENDENCIES	= $$(sort $$($(2)_EXTRACT_DEPENDENCIES))
+$(2)_FINAL_PATCH_DEPENDENCIES	= $$(sort $$($(2)_PATCH_DEPENDENCIES))
+
+$(2)_FINAL_ALL_DEPENDENCIES 	= \
 	$$(sort \
 		$$($(2)_FINAL_DEPENDENCIES) \
 		$$($(2)_FINAL_DOWNLOAD_DEPENDENCIES) \
 		$$($(2)_FINAL_EXTRACT_DEPENDENCIES) \
 		$$($(2)_FINAL_PATCH_DEPENDENCIES))
 
+$(2)_FINAL_RECURSIVE_DEPENDENCIES = $$(sort \
+	$$(if $$(filter undefined,$$(origin $(2)_FINAL_RECURSIVE_DEPENDENCIES__X)), \
+		$$(eval $(2)_FINAL_RECURSIVE_DEPENDENCIES__X := \
+			$$(foreach p, \
+				$$($(2)_FINAL_ALL_DEPENDENCIES), \
+				$$(p) \
+				$$($$(call UPPERCASE,$$(p))_FINAL_RECURSIVE_DEPENDENCIES) \
+			) \
+		) \
+	) \
+	$$($(2)_FINAL_RECURSIVE_DEPENDENCIES__X))
+
+$(2)_FINAL_RECURSIVE_RDEPENDENCIES = $$(sort \
+	$$(if $$(filter undefined,$$(origin $(2)_FINAL_RECURSIVE_RDEPENDENCIES__X)), \
+		$$(eval $(2)_FINAL_RECURSIVE_RDEPENDENCIES__X := \
+			$$(foreach p, \
+				$$($(2)_RDEPENDENCIES), \
+				$$(p) \
+				$$($$(call UPPERCASE,$$(p))_FINAL_RECURSIVE_RDEPENDENCIES) \
+			) \
+		) \
+	) \
+	$$($(2)_FINAL_RECURSIVE_RDEPENDENCIES__X))
+
 # Define sub-target stamps
-$(2)_TARGET_BUILD 			= $$($(2)_DIR)/.stamp_built
-$(2)_TARGET_CONFIGURE		= $$($(2)_DIR)/.stamp_configured
-$(2)_TARGET_RSYNC			= $$($(2)_DIR)/.stamp_rsynced
-$(2)_TARGET_PATCH			= $$($(2)_DIR)/.stamp_patched
-$(2)_TARGET_EXTRACT			= $$($(2)_DIR)/.stamp_extracted
-$(2)_TARGET_SOURCE			= $$($(2)_DIR)/.stamp_downloaded
-$(2)_TARGET_ACTUAL_SOURCE	= $$($(2)_DIR)/.stamp_actual_downloaded
-$(2)_TARGET_DIRCLEAN		= $$($(2)_DIR)/.stamp_dircleaned
+$(2)_TARGET_INSTALL 			= $$($(2)_DIR)/.stamp_installed
+$(2)_TARGET_BUILD 				= $$($(2)_DIR)/.stamp_built
+$(2)_TARGET_CONFIGURE			= $$($(2)_DIR)/.stamp_configured
+$(2)_TARGET_RSYNC				= $$($(2)_DIR)/.stamp_rsynced
+$(2)_TARGET_PATCH				= $$($(2)_DIR)/.stamp_patched
+$(2)_TARGET_EXTRACT				= $$($(2)_DIR)/.stamp_extracted
+$(2)_TARGET_SOURCE				= $$($(2)_DIR)/.stamp_downloaded
+$(2)_TARGET_DIRCLEAN			= $$($(2)_DIR)/.stamp_dircleaned
 
 # Default extract command
 $(2)_EXTRACT_CMDS ?= \
@@ -174,39 +217,42 @@ $(2)_EXTRACT_CMDS ?= \
 		$$(TAR_OPTIONS) $$($(2)_DL_DIR)/$$($(2)_SOURCE))
 
 # Pre/post-steps hooks
-$(2)_PRE_DOWNLOAD_HOOKS		?=
-$(2)_POST_DOWNLOAD_HOOKS	?=
-$(2)_PRE_EXTRACT_HOOKS		?=
-$(2)_POST_EXTRACT_HOOKS		?=
-$(2)_PRE_RSYNC_HOOKS		?=
-$(2)_POST_RSYNC_HOOKS		?=
-$(2)_PRE_PATCH_HOOKS		?=
-$(2)_POST_PATCH_HOOKS		?=
-$(2)_PRE_CONFIGURE_HOOKS	?=
-$(2)_POST_CONFIGURE_HOOKS	?=
-$(2)_PRE_BUILD_HOOKS		?=
-$(2)_POST_BUILD_HOOKS		?=
+$(2)_PRE_DOWNLOAD_HOOKS			?=
+$(2)_POST_DOWNLOAD_HOOKS		?=
+$(2)_PRE_EXTRACT_HOOKS			?=
+$(2)_POST_EXTRACT_HOOKS			?=
+$(2)_PRE_RSYNC_HOOKS			?=
+$(2)_POST_RSYNC_HOOKS			?=
+$(2)_PRE_PATCH_HOOKS			?=
+$(2)_POST_PATCH_HOOKS			?=
+$(2)_PRE_CONFIGURE_HOOKS		?=
+$(2)_POST_CONFIGURE_HOOKS		?=
+$(2)_PRE_BUILD_HOOKS			?=
+$(2)_POST_BUILD_HOOKS			?=
+$(2)_PRE_INSTALL_HOOKS			?=
+$(2)_POST_INSTALL_HOOKS			?=
 
 # Human-friendly targets and target sequencing
-$(1):						$(1)-build
+$(1):							$(1)-install
+$(1)-install:					$$($(2)_TARGET_INSTALL)
+$$($(2)_TARGET_INSTALL):		$$($(2)_TARGET_BUILD)
 
-$(1)-build:					$$($(2)_TARGET_BUILD)
-$$($(2)_TARGET_BUILD):		$$($(2)_TARGET_CONFIGURE)
+$(1)-build:						$$($(2)_TARGET_BUILD)
+$$($(2)_TARGET_BUILD):			$$($(2)_TARGET_CONFIGURE)
 
-$(1)-configure:				$$($(2)_TARGET_CONFIGURE)
-$$($(2)_TARGET_CONFIGURE):	| $$($(2)_FINAL_DEPENDENCIES)
-
-$$($(2)_TARGET_SOURCE) $$($(2)_TARGET_RSYNC): | prepare
+$(1)-configure:					$$($(2)_TARGET_CONFIGURE)
+$$($(2)_TARGET_CONFIGURE):		| $$($(2)_FINAL_DEPENDENCIES)
 
 ifeq ($$(strip $$($(2)_SITE)$$($(2)_SOURCE)),)
 # In case of packages without source code (e.g. br-target), only the
 # configure step is considered.
-$$($(2)_TARGET_CONFIGURE):	| $(1)-source
+$$($(2)_TARGET_CONFIGURE):		| $(1)-source
 
-$(1)-depends:				$$($(2)_FINAL_DEPENDENCIES)
+$(1)-depends:					$$($(2)_FINAL_DEPENDENCIES)
 
-$(1)-source:				| prepare
-	$$(Q)mkdir -p $$($(2)_DIR)
+#TODO: is this needed?
+#$(1)-source:
+#	$$(Q)mkdir -p $$($(2)_DIR)
 
 else ifneq ($$($(2)_OVERRIDE_SRCDIR),)
 # In the package override case, the sequence of steps is:
@@ -216,14 +262,14 @@ else ifneq ($$($(2)_OVERRIDE_SRCDIR),)
 
 # Use an order-only dependency so the "<pkg>-clean-for-rebuild" rule
 # can remove the stamp file without triggering the configure step.
-$$($(2)_TARGET_CONFIGURE):	| $$($(2)_TARGET_RSYNC)
+$$($(2)_TARGET_CONFIGURE):		| $$($(2)_TARGET_RSYNC)
 
-$(1)-depends:				$$($(2)_FINAL_DEPENDENCIES)
+$(1)-depends:					$$($(2)_FINAL_DEPENDENCIES)
 
-$(1)-patch:					$(1)-rsync
-$(1)-extract:				$(1)-rsync
+$(1)-patch:						$(1)-rsync
+$(1)-extract:					$(1)-rsync
 
-$(1)-rsync:					$$($(2)_TARGET_RSYNC)
+$(1)-rsync:						$$($(2)_TARGET_RSYNC)
 
 $(1)-source:
 
@@ -238,24 +284,24 @@ else
 # - patch
 # - configure
 #
-$$($(2)_TARGET_CONFIGURE):	$$($(2)_TARGET_PATCH)
+$$($(2)_TARGET_CONFIGURE):		$$($(2)_TARGET_PATCH)
 
-$(1)-patch:					$$($(2)_TARGET_PATCH)
-$$($(2)_TARGET_PATCH):		$$($(2)_TARGET_EXTRACT)
+$(1)-patch:						$$($(2)_TARGET_PATCH)
+$$($(2)_TARGET_PATCH):			$$($(2)_TARGET_EXTRACT)
 # Order-only dependency
-$$($(2)_TARGET_PATCH):  	| $$(patsubst %,%-patch,$$($(2)_FINAL_PATCH_DEPENDENCIES))
+$$($(2)_TARGET_PATCH):  		| $$(patsubst %,%-patch,$$($(2)_FINAL_PATCH_DEPENDENCIES))
 
-$(1)-extract:				$$($(2)_TARGET_EXTRACT)
-$$($(2)_TARGET_EXTRACT):	$$($(2)_TARGET_SOURCE)
-$$($(2)_TARGET_EXTRACT): 	| $$($(2)_FINAL_EXTRACT_DEPENDENCIES)
+$(1)-extract:					$$($(2)_TARGET_EXTRACT)
+$$($(2)_TARGET_EXTRACT):		$$($(2)_TARGET_SOURCE)
+$$($(2)_TARGET_EXTRACT):		| $$($(2)_FINAL_EXTRACT_DEPENDENCIES)
 
-$(1)-depends:				$$($(2)_FINAL_ALL_DEPENDENCIES)
+$(1)-depends:					$$($(2)_FINAL_ALL_DEPENDENCIES)
 
-$(1)-source:				$$($(2)_TARGET_SOURCE)
-$$($(2)_TARGET_SOURCE): 	| $$($(2)_FINAL_DOWNLOAD_DEPENDENCIES)
+$(1)-source:					$$($(2)_TARGET_SOURCE)
+$$($(2)_TARGET_SOURCE):			| $$($(2)_FINAL_DOWNLOAD_DEPENDENCIES)
 
 $(1)-external-deps:
-	@for p in $$($(2)_SOURCE) $$($(2)_PATCH) $$($(2)_EXTRA_DOWNLOADS) ; do \
+	@for p in $$($(2)_SOURCE)	$$($(2)_PATCH) $$($(2)_EXTRA_DOWNLOADS) ; do \
 		echo $$$$(basename $$$$p) ; \
 	done
 endif
@@ -266,42 +312,61 @@ $(1)-show-version:
 $(1)-show-depends:
 	@echo $$($(2)_FINAL_ALL_DEPENDENCIES)
 
-$(1)-show-build-order:		$$(patsubst %,%-show-build-order,$$($(2)_FINAL_ALL_DEPENDENCIES))
+$(1)-show-recursive-depends:
+			@echo $$($(2)_FINAL_RECURSIVE_DEPENDENCIES)
+
+$(1)-show-recursive-rdepends:
+			@echo $$($(2)_FINAL_RECURSIVE_RDEPENDENCIES)
+
+$(1)-show-build-order:			$$(patsubst %,%-show-build-order,$$($(2)_FINAL_ALL_DEPENDENCIES))
 	@:
 	$$(info $(1))
 
-$(1)-dirclean:				$$($(2)_TARGET_DIRCLEAN)
+$(1)-dirclean:					$$($(2)_TARGET_DIRCLEAN)
 
 $(1)-clean-for-reinstall:
 ifneq ($$($(2)_OVERRIDE_SRCDIR),)
 	rm -f $$($(2)_TARGET_RSYNC)
 endif
+	rm -f $$($(2)_TARGET_INSTALL)
 
-$(1)-clean-for-rebuild: $(1)-clean-for-reinstall
+$(1)-reinstall:					$(1)-clean-for-reinstall $(1)
+
+$(1)-clean-for-rebuild:			$(1)-clean-for-reinstall
 	rm -f $$($(2)_TARGET_BUILD)
 
-$(1)-rebuild:				$(1)-clean-for-rebuild $(1)
+$(1)-rebuild:					$(1)-clean-for-rebuild $(1)
 
-$(1)-clean-for-reconfigure: $(1)-clean-for-rebuild
-							rm -f $$($(2)_TARGET_CONFIGURE)
+$(1)-clean-for-reconfigure: 	$(1)-clean-for-rebuild
+	rm -f $$($(2)_TARGET_CONFIGURE)
 
-$(1)-reconfigure:			$(1)-clean-for-reconfigure $(1)
+$(1)-reconfigure:				$(1)-clean-for-reconfigure $(1)
 
 # Define target local variables.
-$$($(2)_TARGET_BUILD):		PKG=$(2)
-$$($(2)_TARGET_CONFIGURE):	PKG=$(2)
-$$($(2)_TARGET_CONFIGURE):	NAME=$(1)
-$$($(2)_TARGET_RSYNC):		SRCDIR=$$($(2)_OVERRIDE_SRCDIR)
-$$($(2)_TARGET_RSYNC):		PKG=$(2)
-$$($(2)_TARGET_PATCH):		PKG=$(2)
-$$($(2)_TARGET_PATCH):		PKGDIR=$(pkgdir)
-$$($(2)_TARGET_EXTRACT):	PKG=$(2)
-$$($(2)_TARGET_SOURCE):		PKG=$(2)
-$$($(2)_TARGET_SOURCE):		PKGDIR=$(pkgdir)
-$$($(2)_TARGET_DIRCLEAN):	PKG=$(2)
-$$($(2)_TARGET_DIRCLEAN):	NAME=$(1)
+$$($(2)_TARGET_INSTALL):		PKG=$(2)
+$$($(2)_TARGET_BUILD):			PKG=$(2)
+$$($(2)_TARGET_CONFIGURE):		PKG=$(2)
+$$($(2)_TARGET_CONFIGURE):		NAME=$(1)
+$$($(2)_TARGET_RSYNC):			SRCDIR=$$($(2)_OVERRIDE_SRCDIR)
+$$($(2)_TARGET_RSYNC):			PKG=$(2)
+$$($(2)_TARGET_PATCH):			PKG=$(2)
+$$($(2)_TARGET_PATCH):			PKGDIR=$(pkgdir)
+$$($(2)_TARGET_EXTRACT):		PKG=$(2)
+$$($(2)_TARGET_SOURCE):			PKG=$(2)
+$$($(2)_TARGET_SOURCE):			PKGDIR=$(pkgdir)
+$$($(2)_TARGET_DIRCLEAN):		PKG=$(2)
+$$($(2)_TARGET_DIRCLEAN):		NAME=$(1)
 
-# Ensure all virtual targets are PHONY.
+# Register package as a reverse-dependencies of all its dependencies.
+$$(eval $$(foreach p,$$($(2)_FINAL_ALL_DEPENDENCIES),\
+	$$(call UPPERCASE,$$(p))_RDEPENDENCIES += $(1)$$(sep)))
+
+ifneq ($$($(2)_LINUX_CONFIG_FIXUPS),)
+PACKAGES_LINUX_CONFIG_FIXUPS += $$($(2)_LINUX_CONFIG_FIXUPS)$$(sep)
+endif
+TARGET_FINALIZE_HOOKS += $$($(2)_TARGET_FINALIZE_HOOKS)
+
+# Ensure all virtual targets are PHONY. Listed alphabetically.
 .PHONY:	$(1) \
 	$(1)-build \
 	$(1)-clean-for-rebuild \
@@ -312,11 +377,15 @@ $$($(2)_TARGET_DIRCLEAN):	NAME=$(1)
 	$(1)-dirclean \
 	$(1)-external-deps \
 	$(1)-extract \
+	$(1)-install \
 	$(1)-patch \
 	$(1)-rebuild \
 	$(1)-reconfigure \
+	$(1)-reinstall \
 	$(1)-rsync \
 	$(1)-show-depends \
+	$(1)-show-recursive-depends \
+	$(1)-show-recursive-rdepends \
 	$(1)-show-version \
 	$(1)-source
 
