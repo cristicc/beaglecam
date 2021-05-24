@@ -36,16 +36,15 @@ BINARIES_DIR := $(OUTPUT_DIR)/binaries
 # Absolute path to project root directory.
 ROOT_DIR := $(realpath $(CURDIR))
 
-# Project configuration files.
-PRJ_DEFCONFIG := $(ROOT_DIR)/prj.config
-PRJ_DOTCONFIG := $(OUTPUT_DIR)/.config
+# Project configuration file.
+PRJ_CONFIG := $(ROOT_DIR)/prj.config
 
 # Set default goal.
 .PHONY: all
 all:
 
-# List of targets for which PRJ_DOTCONFIG doesn't need to be read in.
-noconfig_targets := clean distclean help
+# List of targets for which PRJ_CONFIG doesn't need to be read in.
+noconfig_targets := prepare clean distclean help
 
 #
 # Some global targets do not trigger a build, but are used to collect metadata,
@@ -56,8 +55,7 @@ noconfig_targets := clean distclean help
 # We're building in two situations: when MAKECMDGOALS is empty (default target
 # is to build), or when MAKECMDGOALS contains something not in nobuild_targets.
 #
-nobuild_targets := $(noconfig_targets) \
-	configure reconfigure %-show-depends %-show-version
+nobuild_targets := $(noconfig_targets) %-show-depends %-show-version
 
 ifeq ($(MAKECMDGOALS),)
   BR_BUILDING = y
@@ -69,7 +67,7 @@ endif
 # the included file if it doesn't exist. If it is successfully rebuilt, make
 # will re-execute itself to read the new version.
 ifeq ($(filter $(noconfig_targets),$(MAKECMDGOALS)),)
--include $(PRJ_DOTCONFIG)
+-include $(PRJ_CONFIG)
 endif
 
 # Avoid passing O=<dir> option for out-of-tree builds when calling make
@@ -146,16 +144,6 @@ STRIP_FIND_CMD = \
 	-not \( $(call findfileclauses,libpthread*.so* ld-*.so* *.ko) \) \
 	-print0
 
-.PHONY: strip-binaries
-strip-binaries:
-	@$(call MESSAGE,"Stripping binaries")
-	$(STRIP_FIND_CMD) | xargs -0 $(STRIPCMD) 2>/dev/null || true
-all: strip-binaries
-
-.PHONY: update-config
-update-config:
-	cp -a $(PRJ_DOTCONFIG) $(PRJ_DEFCONFIG)
-
 # Setup build environment.
 include util/setup-env.mk
 
@@ -168,34 +156,55 @@ include util/pkg-kconfig.mk
 # Include project components.
 include $(sort $(wildcard component/*/*.mk))
 
+# Generate project build targets faking a generic package.
+define PRJ_POST_INSTALL_HOOKS
+	@$(call MESSAGE,"Stripping binaries")
+	$(Q)$(STRIP_FIND_CMD) | xargs -0 $(STRIPCMD) 2>/dev/null || true
+endef
+
+pkgdir = $(ROOT_DIR)
+$(eval $(call generic-component-helper,prj,PRJ))
+
+ifeq ($(PRJ_LINUX_KERNEL_APPENDED_INITRAMFS),y)
+$(PRJ_TARGET_BUILD): linux-rebuild-with-initramfs
+endif
+
+.PHONY: configure
+configure: prj-configure
+
+.PHONY: reconfigure
+reconfigure: prj-reconfigure-all
+
+.PHONY: build
+build: prj-build
+
+.PHONY: rebuild
+rebuild: prj-rebuild-all
+
+all: prj
+prj: | prepare
+
 else # $(PRJ_HAVE_DOT_CONFIG)
 
-.PHONY: update-config
-all update-config:
+all:
 	$(error Invalid or missing project configuration; try "make reconfig")
 	@exit 1
 
 endif # $(PRJ_HAVE_DOT_CONFIG)
 
 $(BUILD_DIR) $(BINARIES_DIR):
-	$(Q)mkdir -p "$@"
+	$(Q)mkdir -p $@
 
-$(PRJ_DOTCONFIG): | $(BUILD_DIR) $(BINARIES_DIR)
-	$(Q)mkdir -p "$(@D)"
+$(OUTPUT_DIR)/.stamp_prepared: | $(BUILD_DIR) $(BINARIES_DIR)
 # Generate a Makefile in the output directory, if using a custom output
 # directory. This allows convenient use of make in the output directory.
 ifeq ($(OUTOFTREE_BUILD),y)
 	$(Q)$(ROOT_DIR)/util/gen-make-wrapper.sh $(ROOT_DIR) $(OUTPUT_DIR)
 endif
-	cp -a $(PRJ_DEFCONFIG) $@
+	$(Q)touch $@
 
-.PHONY: configure
-configure: $(PRJ_DOTCONFIG)
-	@:
-
-.PHONY: reconfigure
-reconfigure:
-	rm -f $(PRJ_DOTCONFIG)
+.PHONY: prepare
+prepare: $(OUTPUT_DIR)/.stamp_prepared
 
 .PHONY: clean
 clean:
@@ -212,13 +221,13 @@ help:
 		'  V=0|1                  0 => quiet build (default), 1 => verbose build' \
 		'  O=DIR                  Create all output artifacts in DIR'. \
 		'' \
-		'Common targets:' \
-		'  configure              Configure project using "$(notdir $(PRJ_DEFCONFIG))" (handled automatically).' \
-		'  reconfigure            Force project configure step.' \
-		'  update-config          Copy build "$(notdir $(PRJ_DOTCONFIG))" back to "$(notdir $(PRJ_DEFCONFIG))".' \
+		'Main targets:' \
+		'  prepare                Create build output directories and Makefile wrapper.' \
 		'  all                    Build project.' \
 		'  clean                  Delete all files created by build.' \
 		'  distclean              Delete all non-source files (including downloads).' \
+		'  reconfigure            Rebuild all project components from the configure step.' \
+		'  rebuild                Rebuild all project components.' \
 		'' \
 		'Generic package build targets:' \
 		'  GPKG                   Build GPKG and all its dependencies.' \
@@ -234,7 +243,9 @@ help:
 		'                         Recursively list packages which have GPKG as a dependency.' \
 		'  GPKG-dirclean          Remove GPKG build directory.' \
 		'  GPKG-reconfigure       Restart the build from the configure step.' \
+		'  GPKG-reconfigure-all   Restart the build from the configure step for all deps.' \
 		'  GPKG-rebuild           Redo the build step.' \
+		'  GPKG-rebuild-all       Redo the build step for all dependencies.' \
 		'  GPKG-reinstall         Redo the install step.' \
 		'' \
 		'Kconfig package build targets:' \
