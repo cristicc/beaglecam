@@ -43,6 +43,16 @@ LINUX_DTBS = $(addsuffix .dtb,$(LINUX_DTS_NAME))
 LINUX_IMAGE_NAME = $(call qstrip,$(PRJ_LINUX_IMAGE_NAME))
 LINUX_TARGET_NAME = $(LINUX_IMAGE_NAME)
 
+LINUX_KERNEL_UIMAGE_LOADADDR = $(call qstrip,$(PRJ_LINUX_KERNEL_UIMAGE_LOADADDR))
+ifneq ($(LINUX_IMAGE_NAME),uImage)
+  ifeq ($(PRJ_LINUX_KERNEL_APPENDED_UIMAGE),)
+  LINUX_KERNEL_UIMAGE_LOADADDR =
+  endif
+endif
+ifneq ($(LINUX_KERNEL_UIMAGE_LOADADDR),)
+LINUX_MAKE_FLAGS += LOADADDR="$(LINUX_KERNEL_UIMAGE_LOADADDR)"
+endif
+
 # Compute the arch path, since i386 and x86_64 are in arch/x86 and not
 # in arch/$(KERNEL_ARCH). Even if the kernel creates symbolic links
 # for bzImage, arch/i386 and arch/x86_64 do not exist when copying the
