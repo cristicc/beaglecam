@@ -100,9 +100,9 @@ define LINUX_BUILD_DTB
 endef
 ifeq ($(PRJ_LINUX_KERNEL_APPENDED_DTB),)
 define LINUX_INSTALL_DTB
-# dtbs moved from arch/<ARCH>/boot to arch/<ARCH>/boot/dts since 3.8-rc1
+	# dtbs moved from arch/<ARCH>/boot to arch/<ARCH>/boot/dts since 3.8-rc1
 	$(foreach dtb,$(LINUX_DTBS), \
-		install -D \
+		$(INSTALL) -m 0644 -D \
 			$(or $(wildcard $(LINUX_ARCH_PATH)/boot/dts/$(dtb)),$(LINUX_ARCH_PATH)/boot/$(dtb)) \
 			$(1)/$(if $(PRJ_LINUX_KERNEL_DTB_KEEP_DIRNAME),$(dtb),$(notdir $(dtb)))
 	)
