@@ -75,7 +75,7 @@ $(2)_DEPENDENCIES += $$($(2)_KCONFIG_DEPENDENCIES)
 # make targets.
 # Note: this must be done _before_ attempting to use $$($(2)_DIR) in a
 # dependency expression
-$(call generic-component-helper,$(1),$(2),$(3),$(4))
+$(call generic-component-helper,$(1),$(2))
 
 # Default values
 $(2)_MAKE ?= $$(MAKE)

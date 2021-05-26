@@ -32,6 +32,7 @@ $(if $(OUTPUT_DIR),, $(error output directory "$(OUTPUT_DIR)" does not exist))
 BUILD_DIR := $(OUTPUT_DIR)/build
 DOWNLOAD_DIR := $(OUTPUT_DIR)/downloads
 BINARIES_DIR := $(OUTPUT_DIR)/binaries
+HOST_DIR := $(OUTPUT_DIR)/host
 
 # Absolute path to project root directory.
 ROOT_DIR := $(realpath $(CURDIR))
@@ -150,17 +151,39 @@ include util/setup-env.mk
 # Include package build infrastructure.
 include util/pkg-download.mk
 include util/pkg-generic.mk
+include util/pkg-autotools.mk
 include util/pkg-br-target.mk
 include util/pkg-kconfig.mk
 
 # Include project components.
 include $(sort $(wildcard component/*/*.mk))
 
+#
 # Generate project build targets faking a generic package.
-define PRJ_POST_INSTALL_HOOKS
+#
+define STRIP_PROJECT_BINARIES
 	@$(call MESSAGE,"Stripping binaries")
 	$(Q)$(STRIP_FIND_CMD) | xargs -0 $(STRIPCMD) 2>/dev/null || true
 endef
+PRJ_POST_INSTALL_HOOKS += STRIP_PROJECT_BINARIES
+
+GENIMAGE_CFG = $(call qstrip,$(PRJ_GENIMAGE_CONFIG_FILE))
+
+ifneq ($(GENIMAGE_CFG),)
+define GEN_BOOTABLE_SDCARD_IMAGE
+	@$(call MESSAGE,"Generating bootable SD card image")
+	$(Q)mkdir -p $(@D)/root.tmp $(@D)/genimage.tmp
+	$(Q)rm -rf $(@D)/genimage.tmp/*
+	$(EXTRA_ENV) genimage \
+		--rootpath $(@D)/root.tmp \
+		--tmppath $(@D)/genimage.tmp \
+		--inputpath $(BINARIES_DIR) \
+		--outputpath $(BINARIES_DIR) \
+		--config $(GENIMAGE_CFG)
+endef
+PRJ_POST_INSTALL_HOOKS += GEN_BOOTABLE_SDCARD_IMAGE
+PRJ_DEPENDENCIES += genimage
+endif
 
 pkgdir = $(ROOT_DIR)
 $(eval $(call generic-component-helper,prj,PRJ))
@@ -169,6 +192,9 @@ ifeq ($(PRJ_LINUX_KERNEL_APPENDED_INITRAMFS),y)
 $(PRJ_TARGET_BUILD): linux-rebuild-with-initramfs
 endif
 
+#
+# Main make targets.
+#
 .PHONY: configure
 configure: prj-configure
 
@@ -182,7 +208,6 @@ build: prj-build
 rebuild: prj-rebuild-all
 
 all: prj
-prj: | prepare
 
 else # $(PRJ_HAVE_DOT_CONFIG)
 
@@ -195,7 +220,11 @@ endif # $(PRJ_HAVE_DOT_CONFIG)
 $(BUILD_DIR) $(BINARIES_DIR):
 	$(Q)mkdir -p $@
 
-$(OUTPUT_DIR)/.stamp_prepared: | $(BUILD_DIR) $(BINARIES_DIR)
+$(HOST_DIR)/usr:
+	$(Q)mkdir -p $(@D)
+	$(Q)ln -snf . $@
+
+$(OUTPUT_DIR)/.stamp_prepared: | $(BUILD_DIR) $(BINARIES_DIR) $(HOST_DIR)/usr
 # Generate a Makefile in the output directory, if using a custom output
 # directory. This allows convenient use of make in the output directory.
 ifeq ($(OUTOFTREE_BUILD),y)
@@ -208,7 +237,7 @@ prepare: $(OUTPUT_DIR)/.stamp_prepared
 
 .PHONY: clean
 clean:
-	$(Q)rm -rf $(BUILD_DIR) $(BINARIES_DIR)
+	$(Q)rm -rf $(BUILD_DIR) $(BINARIES_DIR) $(HOST_DIR) $(OUTPUT_DIR)/.stamp_prepared
 
 .PHONY: distclean
 distclean: clean
