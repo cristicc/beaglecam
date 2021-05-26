@@ -76,12 +76,15 @@ endef
 
 define UBOOT_INSTALL_CMDS
 	$(foreach f,$(UBOOT_BINS), \
-			cp -dpf $(@D)/$(f) $(BINARIES_DIR)/
+		cp -dpf $(@D)/$(f) $(BINARIES_DIR)/
 	)
 	$(if $(PRJ_UBOOT_SPL_NAME),
 		$(foreach f,$(call qstrip,$(PRJ_UBOOT_SPL_NAME)), \
 			cp -dpf $(@D)/$(f) $(BINARIES_DIR)/
 		)
+	)
+	$(if $(PRJ_UBOOT_UENV_PATH),
+		cp -dpf $(call qstrip,$(PRJ_UBOOT_UENV_PATH)) $(BINARIES_DIR)/
 	)
 endef
 
