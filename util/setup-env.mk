@@ -5,11 +5,61 @@
 # https://git.busybox.net/buildroot/tree/package/Makefile.in
 #
 
+#
+# Configure host tools.
+#
+ifndef HOSTAR
+HOSTAR := ar
+endif
+ifndef HOSTAS
+HOSTAS := as
+endif
+ifndef HOSTCC
+HOSTCC := gcc
+HOSTCC := $(shell which $(HOSTCC) || type -p $(HOSTCC) || echo gcc)
+endif
+HOSTCC_NOCCACHE := $(HOSTCC)
+ifndef HOSTCXX
+HOSTCXX := g++
+HOSTCXX := $(shell which $(HOSTCXX) || type -p $(HOSTCXX) || echo g++)
+endif
+HOSTCXX_NOCCACHE := $(HOSTCXX)
+ifndef HOSTCPP
+HOSTCPP := cpp
+endif
+ifndef HOSTLD
+HOSTLD := ld
+endif
+ifndef HOSTLN
+HOSTLN := ln
+endif
+ifndef HOSTNM
+HOSTNM := nm
+endif
+ifndef HOSTOBJCOPY
+HOSTOBJCOPY := objcopy
+endif
+ifndef HOSTRANLIB
+HOSTRANLIB := ranlib
+endif
+HOSTAR := $(shell which $(HOSTAR) || type -p $(HOSTAR) || echo ar)
+HOSTAS := $(shell which $(HOSTAS) || type -p $(HOSTAS) || echo as)
+HOSTCPP := $(shell which $(HOSTCPP) || type -p $(HOSTCPP) || echo cpp)
+HOSTLD := $(shell which $(HOSTLD) || type -p $(HOSTLD) || echo ld)
+HOSTLN := $(shell which $(HOSTLN) || type -p $(HOSTLN) || echo ln)
+HOSTNM := $(shell which $(HOSTNM) || type -p $(HOSTNM) || echo nm)
+HOSTOBJCOPY := $(shell which $(HOSTOBJCOPY) || type -p $(HOSTOBJCOPY) || echo objcopy)
+HOSTRANLIB := $(shell which $(HOSTRANLIB) || type -p $(HOSTRANLIB) || echo ranlib)
+SED := $(shell which sed || type -p sed) -i -e
+
+export HOSTAR HOSTAS HOSTCC HOSTCXX HOSTLD
+export HOSTCC_NOCCACHE HOSTCXX_NOCCACHE
+
 ifndef MAKE
-  MAKE := make
+MAKE := make
 endif
 ifndef HOSTMAKE
-  HOSTMAKE = $(MAKE)
+HOSTMAKE = $(MAKE)
 endif
 HOSTMAKE := $(shell which $(HOSTMAKE) || type -p $(HOSTMAKE) || echo make)
 
@@ -20,9 +70,9 @@ HOSTMAKE := $(shell which $(HOSTMAKE) || type -p $(HOSTMAKE) || echo make)
 # An extra job is used in order to keep processors busy while waiting on I/O.
 #
 ifeq ($(PRJ_JLEVEL),0)
-  PARALLEL_JOBS := $(shell echo $$(($$(nproc 2>/dev/null) + 1)))
+PARALLEL_JOBS := $(shell echo $$(($$(nproc 2>/dev/null) + 1)))
 else
-  PARALLEL_JOBS := $(PRJ_JLEVEL)
+PARALLEL_JOBS := $(PRJ_JLEVEL)
 endif
 
 MAKE1 := $(HOSTMAKE) -j1
@@ -57,14 +107,35 @@ MKIMAGE ?= mkimage
 # For mips64, we'll just keep mips
 # For i386 and x86_64, we need to convert
 ifeq ($(KERNEL_ARCH),x86_64)
-  MKIMAGE_ARCH = x86
+MKIMAGE_ARCH = x86
 else ifeq ($(KERNEL_ARCH),i386)
-  MKIMAGE_ARCH = x86
+MKIMAGE_ARCH = x86
 else
-  MKIMAGE_ARCH = $(KERNEL_ARCH)
+MKIMAGE_ARCH = $(KERNEL_ARCH)
 endif
 
+TARGET_BUILD_FLAGS = $(call qstrip,$(PRJ_BUILD_FLAGS))
+
+TARGET_CPPFLAGS += -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64
+TARGET_CFLAGS = $(TARGET_CPPFLAGS) $(TARGET_BUILD_FLAGS)
+TARGET_CXXFLAGS = $(TARGET_CFLAGS)
+TARGET_FCFLAGS = $(TARGET_BUILD_FLAGS)
+
 TARGET_CROSS = $(call qstrip,$(PRJ_TOOLCHAIN_PATH))
+
+# Define TARGET_xx variables for all common binutils/gcc
+TARGET_AR	= $(TARGET_CROSS)ar
+TARGET_AS	= $(TARGET_CROSS)as
+TARGET_CC	= $(TARGET_CROSS)gcc
+TARGET_CPP	= $(TARGET_CROSS)cpp
+TARGET_CXX	= $(TARGET_CROSS)g++
+TARGET_FC	= $(TARGET_CROSS)gfortran
+TARGET_LD	= $(TARGET_CROSS)ld
+TARGET_NM	= $(TARGET_CROSS)nm
+TARGET_RANLIB	= $(TARGET_CROSS)ranlib
+TARGET_READELF	= $(TARGET_CROSS)readelf
+TARGET_OBJCOPY	= $(TARGET_CROSS)objcopy
+TARGET_OBJDUMP	= $(TARGET_CROSS)objdump
 
 ifeq ($(PRJ_STRIP),y)
   STRIP_STRIP_DEBUG := --strip-debug
@@ -75,21 +146,82 @@ else
   STRIPCMD = $(TARGET_STRIP)
 endif
 
-# Common host utilities.
 TAR ?= tar
 TAR_OPTIONS = $(call qstrip,$(PRJ_TAR_OPTIONS)) -xf
-
-SED := $(shell which sed || type -p sed) -i -e
 
 INSTALL := $(shell which install || type -p install)
 UNZIP := $(shell which unzip || type -p unzip) -q
 
 APPLY_PATCHES = util/apply-patches.sh $(if $(QUIET),-s)
 
+HOST_CPPFLAGS	= -I$(HOST_DIR)/include
+HOST_CFLAGS	?= -O2
+HOST_CFLAGS 	+= $(HOST_CPPFLAGS)
+HOST_CXXFLAGS	+= $(HOST_CFLAGS)
+HOST_LDFLAGS	+= -L$(HOST_DIR)/lib -Wl,-rpath,$(HOST_DIR)/lib
+
+# Quotes are needed for spaces and all in the original PATH content.
+PRJ_PATH = "$(HOST_DIR)/bin:$(HOST_DIR)/sbin:$(PATH)"
+
+TARGET_MAKE_ENV = PATH=$(PRJ_PATH)
+
+TARGET_CONFIGURE_OPTS = \
+	$(TARGET_MAKE_ENV) \
+	AR="$(TARGET_AR)" \
+	AS="$(TARGET_AS)" \
+	LD="$(TARGET_LD)" \
+	NM="$(TARGET_NM)" \
+	CC="$(TARGET_CC)" \
+	GCC="$(TARGET_CC)" \
+	CPP="$(TARGET_CPP)" \
+	CXX="$(TARGET_CXX)" \
+	FC="$(TARGET_FC)" \
+	F77="$(TARGET_FC)" \
+	RANLIB="$(TARGET_RANLIB)" \
+	READELF="$(TARGET_READELF)" \
+	STRIP="$(TARGET_STRIP)" \
+	OBJCOPY="$(TARGET_OBJCOPY)" \
+	OBJDUMP="$(TARGET_OBJDUMP)" \
+	DEFAULT_ASSEMBLER="$(TARGET_AS)" \
+	DEFAULT_LINKER="$(TARGET_LD)" \
+	CPPFLAGS="$(TARGET_CPPFLAGS)" \
+	CFLAGS="$(TARGET_CFLAGS)" \
+	CXXFLAGS="$(TARGET_CXXFLAGS)" \
+	LDFLAGS="$(TARGET_LDFLAGS)" \
+	FCFLAGS="$(TARGET_FCFLAGS)" \
+	FFLAGS="$(TARGET_FCFLAGS)"
+
+HOST_MAKE_ENV = \
+	PATH=$(PRJ_PATH) \
+	PKG_CONFIG_SYSROOT_DIR="/" \
+	PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1 \
+	PKG_CONFIG_ALLOW_SYSTEM_LIBS=1 \
+	PKG_CONFIG_LIBDIR="$(HOST_DIR)/lib/pkgconfig:$(HOST_DIR)/share/pkgconfig"
+
+HOST_CONFIGURE_OPTS = \
+	$(HOST_MAKE_ENV) \
+	AR="$(HOSTAR)" \
+	AS="$(HOSTAS)" \
+	LD="$(HOSTLD)" \
+	NM="$(HOSTNM)" \
+	CC="$(HOSTCC)" \
+	GCC="$(HOSTCC)" \
+	CXX="$(HOSTCXX)" \
+	CPP="$(HOSTCPP)" \
+	OBJCOPY="$(HOSTOBJCOPY)" \
+	RANLIB="$(HOSTRANLIB)" \
+	CPPFLAGS="$(HOST_CPPFLAGS)" \
+	CFLAGS="$(HOST_CFLAGS)" \
+	CXXFLAGS="$(HOST_CXXFLAGS)" \
+	LDFLAGS="$(HOST_LDFLAGS)"
+
 # This is extra environment we can not export ourselves (eg. because some
 # packages use that variable internally, eg. uboot), so we have to explicitly
 # pass it to user-supplied external hooks (eg. post-build, post-images).
 EXTRA_ENV = \
+	PATH=$(PRJ_PATH) \
 	DOWNLOAD_DIR=$(DOWNLOAD_DIR) \
 	BUILD_DIR=$(BUILD_DIR) \
 	O=$(OUTPUT_DIR)
+
+SHARED_STATIC_LIBS_OPTS = $(call qstrip,$(PRJ_SHARED_STATIC_LIBS_OPTS))
