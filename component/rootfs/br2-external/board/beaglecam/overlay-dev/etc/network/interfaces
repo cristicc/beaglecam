@@ -1,0 +1,20 @@
+# Configure Loopback
+auto lo
+iface lo inet loopback
+
+# Configure eth
+auto eth0
+iface eth0 inet static
+    address 192.168.4.100
+    netmask 255.255.255.0
+    network 192.168.4.0
+    broadcast 192.168.4.255
+
+# Configure USB virtual eth
+auto usb0
+iface usb0 inet static
+    address 10.0.0.100
+    netmask 255.255.255.0
+    network 10.0.0.0
+    broadcast 10.0.0.255
+    gateway 10.0.0.1
