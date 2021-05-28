@@ -188,7 +188,7 @@ endif
 pkgdir = $(ROOT_DIR)
 $(eval $(call generic-component-helper,prj,PRJ))
 
-ifneq ($(PRJ_LINUX_KERNEL_APPENDED_INITRAMFS),)
+ifneq ($(LINUX_TARGET_REBUILD_WITH_INITRAMFS),)
 $(PRJ_TARGET_BUILD): $(LINUX_TARGET_REBUILD_WITH_INITRAMFS)
 endif
 
