@@ -33,7 +33,7 @@ This is an experimental embedded Linux OS and application for BeagleBone Black
  <<RefOV7670CamModule>> and display them via a 4.3" LCD Display Cape <<BBDisplayCape>>.
 
 The main purpose of this project is to continue and, if possible, to improve the
-work done in the context of Bootlin's excelent _Embedded Linux boot time optimization
+work done in the context of Bootlin's excellent _Embedded Linux boot time optimization
 training_ <<RefBootlinTrainingBootTime>>, which I strongly recommend to anyone looking
 for solutions to optimize the boot time of Linux-based operating systems.
 
@@ -80,6 +80,7 @@ ifndef::env-github[]
 ----
 endif::[]
 
+
 === Breadboard prototype
 
 image::beaglecam-prototype.svg[]
@@ -95,22 +96,22 @@ Please refer to the BeagleBone Black product page <<RefBeagleBoneBlack>>.
 There are 16 input pins (and 16 output) pins per PRU core, but not all of these
 are accessible on the BeagleBone Black. Additionally, some of them are already
 in use by the LCD cape, hence we can only access less than half of the inputs
-(see the table bellow for more details about the available pins).
+(see the table below for more details about the available pins).
 
 [NOTE]
 For more details about the Programmable Real-time Unit Sub System, please see <<RefAm33xxPrussv2>>.
 
-.BeagleBone PRU input pins for capturing camera frames via D0-D7, PCLK, HREF and VSYNC
+.BeagleBone PRU input pins for capturing camera frames via `D0-D7`, `PCLK`, `HREF` and `VSYNC`
 |===
 | PRU# | R31 bit | BB Header | BB Pin Name | ZCZ BallName  | Pinmux Mode | Cam Pin Name | Comments
 
 | 0    |  0      | P9_31     | SPI1_SCLK   | mcasp0_aclkx  | Mode_6      | D0    |
 | 0    |  1      | P9_29     | SPI1_D0     | mcasp0_fsx    | Mode_6      | D1    |
 | 0    |  2      | P9_30     | SPI1_D1     | mcasp0_axr0   | Mode_6      | D2    |
-| 0    |  3      | P9_28     | SPI1_CS0    | mcasp0_ahclkr | Mode_6      |       | See Conflict1
-| 0    |  4      | P9_42     | GPIO3_18    | mcasp0_aclkr  | Mode_6      | D4    | See Note1
+| 0    |  3      | P9_28     | SPI1_CS0    | mcasp0_ahclkr | Mode_6      |       | See <<pru-pins-conflict>>
+| 0    |  4      | P9_42     | GPIO3_18    | mcasp0_aclkr  | Mode_6      | D4    | See <<pru-pins-note1>>
 | 0    |  5      | P9_27     | GPIO3_19    | mcasp0_fsr    | Mode_6      | D5    |
-| 0    |  6      | P9_41     | GPIO3_20    | mcasp0_axr1   | Mode_6      | D6    | See Note2
+| 0    |  6      | P9_41     | GPIO3_20    | mcasp0_axr1   | Mode_6      | D6    | See <<pru-pins-note2>>
 | 0    |  7      | P9_25     | GPIO3_21    | mcasp0_ahclkx | Mode_6      | D7    |
 | 0    | 14      | P8_16     | GPIO1_14    | gpmc_ad14     | Mode_6      | D3    |
 | 0    | 15      | P8_15     | GPIO1_15    | gpmc_ad15     | Mode_6      | PCLK  |
@@ -120,30 +121,29 @@ For more details about the Programmable Real-time Unit Sub System, please see <<
 | 1    | 16      | P9_26     | UART1_RXD   | uart1_rxd     | Mode_6      |       | Not used
 |===
 
+[#pru-pins-notes]
 [NOTE]
 ====
-Note1::
-The PRU0 Registers{30,31} Bit 4 (GPIO3_18) is routed to P9_42-GPIO0_7 pin.  You MUST set GPIO0_7 to input mode in pinmuxing.
-Both of these signals connect to pin 42 of P11. Resistors are installed that allow for the GPIO3_18
-connection to be removed by removing R202. The intent is to allow the SW to use either of these
-signals, on pin 42. SW should set the unused pin in input mode when using the other pin. This
-allowed us to get an extra signal out to the expansion header.
+[[pru-pins-note1,Note1]]
+Note 1::
+Bit 4 of the PRU0 registers 30 & 31 (`GPIO3_18`) is routed to P9_42 (`GPIO0_7`) pin.
+It is necessary to set GPIO0_7 to *input* mode via pinmuxing.
 
-Note2::
-The PRU0 Registers{30,31} Bit 6 (GPIO3_20) is routed to P9_41-GPIO0_20(CLKOUT2). You must set GPIO0_20 to input mode in pinmuxing.
-Both of these signals connect to pin 41 of P11. Resistors are installed that allow for the GPIO3_20
-connection to be removed by removing R221. The intent is to allow the SW to use either of these
-signals, one or the other, on pin 41. SW should set the unused pin in input mode when using the
-other pin. This allowed us to get an extra signal out to the expansion header.
+[[pru-pins-note2,Note2]]
+Note 2::
+Bit 6 of the PRU0 registers 30 & 31 (`GPIO3_20`) is routed to P9_41 (`GPIO0_20` / `CLKOUT2`).
+It is necessary to set `GPIO0_20` to *input* mode via pinmuxing.
 
-Conflict1::
-pr1_pru0_pru_r31_3:
-AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, 0x0, MUX_MODE4) /* mcasp0_ahclkr.eCAP2_in_PWM2_out */
+[[pru-pins-conflict,Conflict]]
+Conflict::
+Bit 3 of the PRU0 registers is cannot be used since the corresponding pin P9_28 (`SPI1_CS0`)
+is already used by the LCD cape in `Mode_4` (`eCAP2_in_PWM2_out`).
 ====
+
 
 === Camera module
 
-.BeagleBone pins for controlling camera via XCLK, SIO_C and SIO_D
+.BeagleBone pins for controlling camera via `XCLK`, `SIO_C` and `SIO_D`
 |===
 | BB Header | BB Pin Name | ZCZ BallName  | Pinmux Mode | Pinmux Function | Cam Pin Name
 
@@ -174,7 +174,7 @@ endif::[]
 
 == Build process
 
-Please follow the instructions bellow to setup your build environment and
+Please follow the instructions below to setup your build environment and
 generate the project binaries: rootfs/initramfs, Linux kernel, U-Boot.
 
 === Host system setup
@@ -182,7 +182,7 @@ generate the project binaries: rootfs/initramfs, Linux kernel, U-Boot.
 The project building process has been tested on an Ubuntu 20.04 chroot environment,
 using `schroot`, but it should work on any recent Debian based distribution.
 
-Please run the commands bellow to install all the packages the build environment
+Please run the commands below to install all the packages the build environment
 relies on:
 
 [source,sh]
@@ -210,6 +210,7 @@ $ sudo apt install genisoimage gperf bison flex texinfo help2man bc libtool-bin 
 For other distros (e.g. RPM based), the commands above must be adapted according
 to the specific package manager and actual package names.
 
+
 === Get project sources
 
 Let's assume the project location throughout the document will be `{PROJECT_DIR}`.
@@ -235,6 +236,7 @@ you could try to download the source archive with `curl`:
 [source,sh,subs="attributes+"]
 $ curl -O {PROJECT_URL}/archive/refs/heads/main.zip
 ====
+
 
 === Configure the build
 
@@ -276,42 +278,39 @@ PRJ_LINUX_KERNEL_VERSION = a.b.c
 PRJ_UBOOT_VERSION = yyyy.mm
 PRJ_BUILDROOT_VERSION = yyyy.mm[.bb]
 
-[IMPORTANT]
-====
-For falcon boot, ensure the following settings are provided:
-
-[source,makefile]
-PRJ_LINUX_IMAGE_NAME = uImage
-PRJ_LINUX_KERNEL_UIMAGE_LOADADDR = 80008000
-
-For normal boot, use `PRJ_LINUX_IMAGE_NAME = zImage`.
-====
-
 By default, the build artifacts will be stored in `{OUTPUT_DIR}`, but
-this can be changed via the `O=DIR` option, for an out-of-tree build:
+this can be changed via the `O=DIR` option, for an out-of-tree build.
+
+Run the following command to initialize the chosen output directory. We call the
+`prepare` target manually to make sure `make` will not trigger `all` which would
+start the build process, but this is not mandatory since `prepare` is implicitly
+invoked before building any project component.
 
 [source,sh,subs="attributes+"]
-$ make O={CUSTOM_OUTPUT_DIR}
+----
+$ make O={CUSTOM_OUTPUT_DIR} prepare
+  GEN     {CUSTOM_OUTPUT_DIR}/Makefile
 
-It will create the given path and also the following content:
-
-[source,sh,subs="attributes+"]
 $ ls -1a {CUSTOM_OUTPUT_DIR}
 binaries
 build
-.config
+host
 Makefile
+.stamp_prepared
+----
 
-The `binaries` folder will contain final images, the `build` folder is used
-for build artifacts and the `.config` file is a copy of the `prj.config` and will
-be included by the build platform on every `make` invocation. Thus any later
-changes to `prj.config` will be ignored unless `.config` is manually removed or,
-better, `make reconfig` has been issued.
+The `binaries` folder will contain final images (e.g. kernel, u-boot, rootfs),
+the `build` folder is used for temporary build artifacts and the `host` folder
+will contain the binaries for the host components (e.g. `genimage` tool).
+`.stamp_prepared` is a timestamp file used internally by the build platform to
+avoid redoing the preparation step once completed.
 
 [TIP]
-There is a `Makefile` wrapper generated in the custom output folder having the
-purpose of simplifying the `make` usage for out-of-tree builds, i.e. simply `cd`
-to the custom output directory and run `make` without passing the `O=` argument.
+There is also a `Makefile` wrapper generated in the custom output folder having
+the purpose of simplifying the `make` usage for out-of-tree builds, i.e. simply
+`cd` to the custom output directory and run `make` without passing the `O=`
+argument.
+
 
 === Start the build
 
@@ -343,19 +342,20 @@ The generated images are stored in the `binaries` folder:
 
 [source,sh]
 $ ls -1 binaries/
+am335x-boneblack-lcd43.dtb
 boot.vfat
 MLO
 rootfs.cpio
-rootfs.tar
 sd-card.img
 u-boot.img
+uEnv-falcon.txt
 uEnv.txt
 uImage
+zImage
 
 [IMPORTANT]
-`uImage` is the kernel image to be used for falcon boot. For regular boot, the
-build configuration should be changed to generate `zImage` instead. For more
-details, see <<Configure the build>> section.
+`uImage` is the kernel image to be used for <<enable-falcon,falcon boot>>.
+For regular boot, the `zImage` format will be used instead.
 
 
 == Deployment and testing
@@ -386,6 +386,7 @@ Please wait while writing 'binaries/sd-card.img' to '/dev/sda'..
 53477376 bytes (53 MB, 51 MiB) copied, 2.21715 s, 24.1 MB/s
 Done.
 ----
+
 
 === Boot BeagleBone SBC
 
@@ -420,7 +421,7 @@ First frame decoded!
 [TIP]
 ====
 To make sure BeagleBone is booting from the uSD card, stop at the U-Boot prompt
-(keep pressing the SPACE key while reseting the board) and run the following
+(keep pressing the SPACE key while resetting the board) and run the following
 commands to erase the partition table of the on-board (e)MMC storage:
 
 [script,sh]
@@ -438,6 +439,8 @@ MMC erase: dev # 1, block # 0, count 1024 ... 1024 blocks erased: OK
 ----
 ====
 
+
+[#enable-falcon]
 === Enable U-Boot Falcon mode
 
 This operation mode allows U-Boot MLO (SPL) to skip loading `u-boot.img` and
