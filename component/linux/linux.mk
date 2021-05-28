@@ -7,8 +7,10 @@ LINUX_SOURCE = linux-$(LINUX_VERSION).tar.xz
 # toolchain before we can call the configurators.
 LINUX_KCONFIG_DEPENDENCIES += toolchain
 
+LINUX_KERNEL_APPENDED_INITRAMFS = $(call qstrip,$(PRJ_LINUX_KERNEL_APPENDED_INITRAMFS))
+
 LINUX_MAKE_ENV = \
-	BR_BINARIES_DIR=$(BINARIES_DIR)
+	ENVPRJ_LINUX_KERNEL_APPENDED_INITRAMFS=$(LINUX_KERNEL_APPENDED_INITRAMFS)
 
 # We don't want to run depmod after installing the kernel. It's done in a
 # target-finalize hook, to encompass modules installed by packages.
@@ -42,6 +44,9 @@ LINUX_DTBS = $(addsuffix .dtb,$(LINUX_DTS_NAME))
 
 LINUX_IMAGE_NAME = $(call qstrip,$(PRJ_LINUX_IMAGE_NAME))
 LINUX_TARGET_NAME = $(LINUX_IMAGE_NAME)
+
+LINUX_IMAGE_NAME_EXTRA = $(call qstrip,$(PRJ_LINUX_IMAGE_NAME_EXTRA))
+LINUX_TARGET_NAME += $(LINUX_IMAGE_NAME_EXTRA)
 
 LINUX_KERNEL_UIMAGE_LOADADDR = $(call qstrip,$(PRJ_LINUX_KERNEL_UIMAGE_LOADADDR))
 ifneq ($(LINUX_IMAGE_NAME),uImage)
@@ -84,10 +89,10 @@ define LINUX_KCONFIG_FIXUP_CMDS
 	# As the kernel gets compiled before root filesystems are built, we create a
 	# fake cpio file. It'll be replaced later by the real cpio archive, and the
 	# kernel will be rebuilt using the linux-rebuild-with-initramfs target.
-	$(if $(PRJ_LINUX_KERNEL_APPENDED_INITRAMFS),
-		mkdir -p $(ROOTFS_BUILDDIR)
-		touch $(BINARIES_DIR)/rootfs.cpio
-		$(call KCONFIG_SET_OPT,CONFIG_INITRAMFS_SOURCE,"$${BR_BINARIES_DIR}/rootfs.cpio")
+	$(if $(LINUX_KERNEL_APPENDED_INITRAMFS),
+		mkdir -p $(dir $(LINUX_KERNEL_APPENDED_INITRAMFS))
+		touch $(LINUX_KERNEL_APPENDED_INITRAMFS)
+		$(call KCONFIG_SET_OPT,CONFIG_INITRAMFS_SOURCE,"$${ENVPRJ_LINUX_KERNEL_APPENDED_INITRAMFS}")
 		$(call KCONFIG_SET_OPT,CONFIG_INITRAMFS_ROOT_UID,0)
 		$(call KCONFIG_SET_OPT,CONFIG_INITRAMFS_ROOT_GID,0))
 	$(call KCONFIG_DISABLE_OPT,CONFIG_GCC_PLUGINS)
@@ -173,6 +178,14 @@ define LINUX_INSTALL_IMAGE
 endef
 endif
 
+ifneq ($(LINUX_IMAGE_NAME_EXTRA),)
+define LINUX_INSTALL_IMAGE_EXTRA
+	$(foreach img,$(LINUX_IMAGE_NAME_EXTRA), \
+		$(INSTALL) -m 0644 -D $(LINUX_ARCH_PATH)/boot/$(img) $(1) \
+	)
+endef
+endif
+
 ifeq ($(PRJ_STRIP),y)
 LINUX_MAKE_FLAGS += INSTALL_MOD_STRIP=1
 endif
@@ -198,6 +211,7 @@ endef
 
 define LINUX_INSTALL_CMDS
 	$(call LINUX_INSTALL_IMAGE,$(BINARIES_DIR))
+	$(call LINUX_INSTALL_IMAGE_EXTRA,$(BINARIES_DIR))
 	$(call LINUX_INSTALL_DTB,$(BINARIES_DIR))
 	$(LINUX_INSTALL_MODULES)
 	$(LINUX_RUN_DEPMOD)
@@ -207,13 +221,15 @@ $(eval $(kconfig-component))
 
 # Support for rebuilding the kernel after the cpio archive has
 # been generated.
-.PHONY: linux-rebuild-with-initramfs
-linux-rebuild-with-initramfs: $(LINUX_DIR)/.stamp_installed
-linux-rebuild-with-initramfs: rootfs
-linux-rebuild-with-initramfs:
+LINUX_TARGET_REBUILD_WITH_INITRAMFS = $(LINUX_DIR)/.stamp_rebuild-with-initramfs
+$(LINUX_TARGET_REBUILD_WITH_INITRAMFS): $(LINUX_TARGET_INSTALL) $(LINUX_KERNEL_APPENDED_INITRAMFS)
 	@$(call MESSAGE,"Rebuilding kernel with initramfs")
 	# Build the kernel.
 	$(LINUX_MAKE_ENV) $(MAKE) $(LINUX_MAKE_FLAGS) -C $(LINUX_DIR) $(LINUX_TARGET_NAME)
 	$(LINUX_APPEND_DTB)
 	# Copy the kernel image(s) to its(their) final destination
 	$(call LINUX_INSTALL_IMAGE,$(BINARIES_DIR))
+	$(Q)touch $@
+
+.PHONY: linux-rebuild-with-initramfs
+linux-rebuild-with-initramfs: $(LINUX_TARGET_REBUILD_WITH_INITRAMFS)
