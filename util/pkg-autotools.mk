@@ -113,6 +113,7 @@ $(2)_BUILD_TYPE				= $(call UPPERCASE,$(3))
 
 ifeq ($(3),host)
 $(2)_INSTALL_OPTS			?= DESTDIR=$$(HOST_DIR) install
+$(2)_ADD_TOOLCHAIN_DEPENDENCY ?= NO
 else
 $(2)_INSTALL_OPTS			?= DESTDIR=$$(BINARIES_DIR) install
 endif
