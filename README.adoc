@@ -190,20 +190,20 @@ relies on:
 # Required for generating uImage compatible binaries
 $ sudo apt install u-boot-tools
 
-# Required for compressing the Linux kernel using LZO
-$ sudo apt install lzop
-
-# Required for creating/flashing SD card images (mkdosfs, mcopy, dialog)
-$ sudo apt install dosfstools mtools dialog
+# Required for creating/flashing SD card images (dialog, mkdosfs, mcopy)
+$ sudo apt install dialog dosfstools mtools
 
 # Required for building the x86 TI's PRU Code Generation Tools (CGT)
 $ sudo apt install libc6-i386 lib32stdc++6 lib32z1
+
+# Possibly required for building the Linux kernel
+$ sudo apt install kmod libgmp-dev libmpfr-dev libmpc-dev libssl-dev lzop
 
 # Common (usually pre-installed) utilities
 $ sudo apt install cpio gawk gettext git patch perl python rsync tar unzip wget
 
 # Other (indirect) dependencies
-$ sudo apt install genisoimage gperf bison flex texinfo help2man bc libtool-bin libncurses-dev
+$ sudo apt install bc bison flex genisoimage gperf help2man libncurses-dev libtool-bin texinfo
 ----
 
 [IMPORTANT]
@@ -278,8 +278,12 @@ PRJ_LINUX_KERNEL_VERSION = a.b.c
 PRJ_UBOOT_VERSION = yyyy.mm
 PRJ_BUILDROOT_VERSION = yyyy.mm[.bb]
 
-By default, the build artifacts will be stored in `{OUTPUT_DIR}`, but
-this can be changed via the `O=DIR` option, for an out-of-tree build.
+Currently the project allows choosing between two build profiles: `prod` and
+`dev`. The former is used by default if the `PRJ_PROFILE` variable is not set
+by the user via the command line or the environment.
+
+By default, the build artifacts will be stored in `{OUTPUT_DIR}`, but this can
+be changed via the `O=DIR` option, for an out-of-tree build.
 
 Run the following command to initialize the chosen output directory. We call the
 `prepare` target manually to make sure `make` will not trigger `all` which would
@@ -288,7 +292,7 @@ invoked before building any project component.
 
 [source,sh,subs="attributes+"]
 ----
-$ make O={CUSTOM_OUTPUT_DIR} prepare
+$ make O={CUSTOM_OUTPUT_DIR} PRJ_PROFILE=prod prepare
   GEN     {CUSTOM_OUTPUT_DIR}/Makefile
 
 $ ls -1a {CUSTOM_OUTPUT_DIR}

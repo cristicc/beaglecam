@@ -13,9 +13,14 @@
 # Use POSIX shell.
 SHELL = /bin/sh
 
+# Set project default build profile.
+ifndef PRJ_PROFILE
+override PRJ_PROFILE = prod
+endif
+
 # Set O variable if not already done on the command line;
 ifneq ("$(origin O)", "command line")
-  O := $(CURDIR)/output
+O := $(CURDIR)/output
 endif
 
 # Remove any trailing '/.' added by the makefile wrapper installed in the $(O)
@@ -59,9 +64,9 @@ noconfig_targets := prepare clean distclean help
 nobuild_targets := $(noconfig_targets) %-show-depends %-show-version
 
 ifeq ($(MAKECMDGOALS),)
-  BR_BUILDING = y
+BR_BUILDING = y
 else ifneq ($(filter-out $(nobuild_targets),$(MAKECMDGOALS)),)
-  BR_BUILDING = y
+BR_BUILDING = y
 endif
 
 # Pull in the user's configuration file. Note that make will attempt to rebuild
@@ -77,23 +82,23 @@ MAKEOVERRIDES :=
 
 # Check if building in-tree or out-of-tree.
 ifeq ($(OUTPUT_DIR),$(ROOT_DIR)/output)
-  OUTOFTREE_BUILD =
+OUTOFTREE_BUILD =
 else
-  OUTOFTREE_BUILD = y
+OUTOFTREE_BUILD = y
 endif
 
 # Use 'make V=1' to see the all commands.
 ifeq ("$(origin V)", "command line")
-  KBUILD_VERBOSE = $(V)
+KBUILD_VERBOSE = $(V)
 endif
 ifndef KBUILD_VERBOSE
-  KBUILD_VERBOSE = 0
+KBUILD_VERBOSE = 0
 endif
 
 ifeq ($(KBUILD_VERBOSE),1)
   Q =
   ifndef VERBOSE
-    VERBOSE = 1
+  VERBOSE = 1
   endif
   export VERBOSE
 else
@@ -228,7 +233,7 @@ $(OUTPUT_DIR)/.stamp_prepared: | $(BUILD_DIR) $(BINARIES_DIR) $(HOST_DIR)/usr
 # Generate a Makefile in the output directory, if using a custom output
 # directory. This allows convenient use of make in the output directory.
 ifeq ($(OUTOFTREE_BUILD),y)
-	$(Q)$(ROOT_DIR)/util/gen-make-wrapper.sh $(ROOT_DIR) $(OUTPUT_DIR)
+	$(Q)$(ROOT_DIR)/util/gen-make-wrapper.sh $(ROOT_DIR) $(OUTPUT_DIR) $(PRJ_PROFILE)
 endif
 	$(Q)touch $@
 
