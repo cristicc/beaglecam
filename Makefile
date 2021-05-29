@@ -13,11 +13,6 @@
 # Use POSIX shell.
 SHELL = /bin/sh
 
-# Set project default build profile.
-ifndef PRJ_PROFILE
-override PRJ_PROFILE = prod
-endif
-
 # Set O variable if not already done on the command line;
 ifneq ("$(origin O)", "command line")
 O := $(CURDIR)/output
@@ -35,7 +30,6 @@ $(if $(OUTPUT_DIR),, $(error output directory "$(OUTPUT_DIR)" does not exist))
 
 # Set common paths.
 BUILD_DIR := $(OUTPUT_DIR)/build
-DOWNLOAD_DIR := $(OUTPUT_DIR)/downloads
 BINARIES_DIR := $(OUTPUT_DIR)/binaries
 HOST_DIR := $(OUTPUT_DIR)/host
 
@@ -44,6 +38,18 @@ ROOT_DIR := $(realpath $(CURDIR))
 
 # Project configuration file.
 PRJ_CONFIG := $(ROOT_DIR)/prj.config
+
+# Set project default build profile.
+ifndef PRJ_PROFILE
+override PRJ_PROFILE = prod
+endif
+
+# Set project default download path.
+ifndef DOWNLOAD_DIR
+override DOWNLOAD_DIR := $(OUTPUT_DIR)/downloads
+else
+override DOWNLOAD_DIR := $(shell mkdir -p $(DOWNLOAD_DIR) >/dev/null 2>&1)$(realpath $(DOWNLOAD_DIR))
+endif
 
 # Set default goal.
 .PHONY: all
@@ -233,7 +239,8 @@ $(OUTPUT_DIR)/.stamp_prepared: | $(BUILD_DIR) $(BINARIES_DIR) $(HOST_DIR)/usr
 # Generate a Makefile in the output directory, if using a custom output
 # directory. This allows convenient use of make in the output directory.
 ifeq ($(OUTOFTREE_BUILD),y)
-	$(Q)$(ROOT_DIR)/util/gen-make-wrapper.sh $(ROOT_DIR) $(OUTPUT_DIR) $(PRJ_PROFILE)
+	$(Q)$(ROOT_DIR)/util/gen-make-wrapper.sh \
+		$(ROOT_DIR) $(OUTPUT_DIR) $(DOWNLOAD_DIR) $(PRJ_PROFILE)
 endif
 	$(Q)touch $@
 

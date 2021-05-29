@@ -6,7 +6,8 @@
 # Args:
 # $1 - Src directory
 # $2 - Output directory
-# $3 - Build profile
+# $3 - Download directory
+# $4 - Build profile
 #
 # Based on Buildroot's mkmakefile support script:
 # https://git.busybox.net/buildroot/tree/support/scripts/mkmakefile
@@ -36,7 +37,7 @@ endif
 
 makedir := \$(dir \$(lastword \$(MAKEFILE_LIST)))
 
-MAKEARGS := -C "$1" PRJ_PROFILE=$3
+MAKEARGS := -C "$1" DOWNLOAD_DIR="$3" PRJ_PROFILE="$4"
 
 # If \$(makedir) is not absolute, prefix the path with \$(CURDIR).
 # Additionally, remove any trailing '/'.
