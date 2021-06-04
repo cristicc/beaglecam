@@ -18,7 +18,9 @@
 define buildroot-component-helper
 
 $(2)_MAKE					?= $$(MAKE)
-$(2)_MAKE_ENV				+= BR2_DL_DIR=$$(DOWNLOAD_DIR)
+$(2)_MAKE_ENV				+= BR2_DL_DIR=$$(DOWNLOAD_DIR) \
+								PRJ_VERSION=$$(PRJ_VERSION) \
+								PRJ_BINARIES_DIR=$$(BINARIES_DIR)
 $(2)_MAKE_OPTS				?=
 
 $(2)_KCONFIG_OPTS			?= -C $$(BUILDROOT_BUILDDIR) \
