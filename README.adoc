@@ -20,7 +20,7 @@ endif::[]
 :PROJECT_URL: https://github.com/cristicc/{PROJECT_NAME}
 :PROJECT_DIR: ${HOME}/{PROJECT_NAME}
 :OUTPUT_DIR: {PROJECT_DIR}/output
-:CUSTOM_OUTPUT_DIR: /path/to/custom/output/dir
+:DEV_OUTPUT_DIR: {OUTPUT_DIR}/dev
 
 toc::[]
 
@@ -200,7 +200,7 @@ $ sudo apt install libc6-i386 lib32stdc++6 lib32z1
 $ sudo apt install kmod libgmp-dev libmpfr-dev libmpc-dev libssl-dev lzop
 
 # Common (usually pre-installed) utilities
-$ sudo apt install cpio gawk gettext git patch perl python rsync tar unzip wget
+$ sudo apt install cpio gawk gettext git openssh-client patch perl python rsync tar unzip wget
 
 # Other (indirect) dependencies
 $ sudo apt install bc bison flex genisoimage gperf help2man libncurses-dev libtool-bin texinfo
@@ -279,23 +279,27 @@ PRJ_UBOOT_VERSION = yyyy.mm
 PRJ_BUILDROOT_VERSION = yyyy.mm[.bb]
 
 Currently the project allows choosing between two build profiles: `prod` and
-`dev`. The former is used by default if the `PRJ_PROFILE` variable is not set
+`dev`. The former is implicitly used if the `PRJ_PROFILE` variable is not set
 by the user via the command line or the environment.
 
 By default, the build artifacts will be stored in `{OUTPUT_DIR}`, but this can
 be changed via the `O=DIR` option, for an out-of-tree build.
 
-Run the following command to initialize the chosen output directory. We call the
-`prepare` target manually to make sure `make` will not trigger `all` which would
-start the build process, but this is not mandatory since `prepare` is implicitly
-invoked before building any project component.
+Now run the following command to initialize the chosen output directory for the
+`dev` profile we are going to use. Additionally we also provide a custom
+location for the downloaded source archives to be able to share it between the
+two profiles, otherwise every profile will use its own download folder and, as
+a consequence, the source packages will be downloaded twice. Also note we call
+the `prepare` target manually to make sure `make` will not trigger `all` which
+would start the build process. However this is not mandatory since `prepare` is
+implicitly invoked before building any project component.
 
 [source,sh,subs="attributes+"]
 ----
-$ make O={CUSTOM_OUTPUT_DIR} PRJ_PROFILE=prod prepare
-  GEN     {CUSTOM_OUTPUT_DIR}/Makefile
+$ make O={DEV_OUTPUT_DIR} PRJ_PROFILE=dev DOWNLOAD_DIR={DEV_OUTPUT_DIR}/../downloads/ prepare
+  GEN     {DEV_OUTPUT_DIR}/Makefile
 
-$ ls -1a {CUSTOM_OUTPUT_DIR}
+$ ls -1a {DEV_OUTPUT_DIR}
 binaries
 build
 host
@@ -312,8 +316,8 @@ avoid redoing the preparation step once completed.
 [TIP]
 There is also a `Makefile` wrapper generated in the custom output folder having
 the purpose of simplifying the `make` usage for out-of-tree builds, i.e. simply
-`cd` to the custom output directory and run `make` without passing the `O=`
-argument.
+`cd` to the custom output directory and run `make` *without* passing any of the
+initial arguments.
 
 
 === Start the build
@@ -324,7 +328,7 @@ the command in the custom output directory.
 
 [source,sh,subs="attributes+"]
 ----
-$ cd {CUSTOM_OUTPUT_DIR}
+$ cd {DEV_OUTPUT_DIR}
 $ make
 [...]
 === toolchain  Installing to binaries directory
@@ -417,9 +421,27 @@ DRAM:  512 MiB
 
 Starting kernel ...
 
-Starting ffmpeg
+[    0.000000] Booting Linux on physical CPU 0x0
+[    0.000000] Linux version 5.11.11 (cristi@ubuntuws) (arm-linux-gcc.br_real (Buildroot 2020.08-14-ge5a2a90) 9.3.0, GNU ld (GNU Binutils) 2.33.1) #7 SMP Sat May 29 21:05:26 UTC 2021
+[    0.000000] CPU: ARMv7 Processor [413fc082] revision 2 (ARMv7), cr=10c5387d
 [...]
-First frame decoded!
+Starting syslogd: OK
+Starting klogd: OK
+Running sysctl: OK
+Starting dropbear sshd: OK
+Starting network: OK
+
+beaglecam login: root
+
+╔══╗         ╔╗   ╔═══╗     ╔═══╦═══╗
+║╔╗║         ║║   ║╔═╗║     ║╔═╗║╔═╗║
+║╚╝╚╦══╦══╦══╣║╔══╣║ ╚╬══╦╗╔╣║ ║║╚══╗
+║╔═╗║║═╣╔╗║╔╗║║║║═╣║ ╔╣╔╗║╚╝║║ ║╠══╗║
+║╚═╝║║═╣╔╗║╚╝║╚╣║═╣╚═╝║╔╗║║║║╚═╝║╚═╝║
+╚═══╩══╩╝╚╩═╗╠═╩══╩═══╩╝╚╩╩╩╩═══╩═══╝
+          ╔═╝║   Version 0.1 (dev)
+          ╚══╝
+root@beaglecam:~#
 ----
 
 [TIP]
