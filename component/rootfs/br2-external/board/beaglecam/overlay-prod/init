@@ -1,29 +1,13 @@
 #!/bin/sh
+
 # devtmpfs does not get automounted for initramfs
 /bin/mount -t devtmpfs devtmpfs /dev
 #/bin/mount -t proc proc /proc
 /bin/mount -t sysfs sysfs /sys
 
-# use the /dev/console device node from devtmpfs if possible to not
-# confuse glibc's ttyname_r().
-# This may fail (E.G. booted with console=), and errors from exec will
-# terminate the shell, so use a subshell for the test
-#if (exec 0</dev/console) 2>/dev/null; then
-#    exec 0</dev/console
-#    exec 1>/dev/console
-#    exec 2>/dev/console
-#fi
-
-#[ -e /dev/video0 ] || {
-#   echo "Waiting for /dev/video0 to be ready..." > /dev/console
-#   while ! [ -e /dev/video0 ]; do
-#       usleep 10
-#   done
-#}
-
 echo "Starting ffmpeg" > /dev/console
 #ffmpeg -t  10 -f video4linux2 -video_size 432x240 -input_format mjpeg -i /dev/video0 -pix_fmt rgb565le -f fbdev /dev/fb0 >/dev/console 2>&1
 #ffmpeg -t 0.1 -f video4linux2 -video_size 432x240 -input_format mjpeg -i /dev/video0 -pix_fmt rgb565le -f fbdev /dev/fb0 >/dev/console 2>&1
-ffmpeg        -f video4linux2 -video_size 432x240 -input_format mjpeg -i /dev/video0 -frames:v 1 -pix_fmt rgb565le -f fbdev /dev/fb0 >/dev/console 2>&1
+ ffmpeg        -f video4linux2 -video_size 432x240 -input_format mjpeg -i /dev/video0 -frames:v 1 -pix_fmt rgb565le -f fbdev /dev/fb0 >/dev/console 2>&1
 
 exec /bin/sh "$@"

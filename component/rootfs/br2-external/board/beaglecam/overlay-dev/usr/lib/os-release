@@ -1,0 +1,6 @@
+NAME="BeagleCam OS"
+VERSION="@OS_VER@ (dev)"
+ID=beaglecamos
+VERSION_ID=@OS_VER@"
+PRETTY_NAME="BeagleCam Development OS"
+HOME_URL="N/A"

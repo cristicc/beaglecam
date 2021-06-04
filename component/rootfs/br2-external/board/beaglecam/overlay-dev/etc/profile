@@ -1,0 +1,33 @@
+# Minimal shell profile.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+tty | grep -qs 'tty\(S\|AMA\|O\)' && stty cols 120 rows 60
+[ -f /etc/banner ] && cat /etc/banner
+
+if [ "${PS1-}" ]; then
+    case "${TERM-}" in
+    linux|xterm*|rxvt*)
+        export PS1='\[\033[1;32m\]\u@\h\[\033[0m\]:\[\033[1;34m\]\w\[\033[0m\]\$ '
+        ;;
+    *)
+        export PS1='\u@\h:\w\$ '
+        ;;
+    esac
+fi
+
+export PAGER='/bin/more'
+export EDITOR='/bin/vi'
+
+[ -x /bin/more ] || alias more=less
+[ -x /bin/vim ] && alias vi=vim || alias vim=vi
+
+alias ll='ls -alF --color=auto'
+alias nano='nano -AElSiw -T 4'
+
+[ -x /usr/bin/arp -o -x /sbin/arp ] || arp() { cat /proc/net/arp; }
+[ -x /usr/bin/ldd ] || ldd() { LD_TRACE_LOADED_OBJECTS=1 $*; }
+
+for FILE in /etc/profile.d/*.sh; do
+    [ -e "$FILE" ] && . "$FILE"
+done
+unset FILE
