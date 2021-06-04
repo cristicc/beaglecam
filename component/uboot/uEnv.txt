@@ -1,4 +1,4 @@
-set_bootargs=setenv bootargs console=ttyS0,115200n8 g_ether.dev_addr=f8:dc:7a:30:30:02 g_ether.host_addr=f8:dc:7a:30:30:01
+set_bootargs=setenv bootargs console=ttyS0,115200n8 -- cdc_eem.dev_addr=f8:dc:7a:30:30:02 cdc_eem.host_addr=f8:dc:7a:30:30:01
 loadimage=load mmc 0:1 ${loadaddr} zImage
 loadramdisk=load mmc 0:1 ${rdaddr} rootfs.cpio; setenv rdsize ${filesize}
 loadfdt=load mmc 0:1 ${fdtaddr} am335x-boneblack-lcd43.dtb

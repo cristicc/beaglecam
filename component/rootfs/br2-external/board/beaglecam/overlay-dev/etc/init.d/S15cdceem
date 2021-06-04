@@ -1,0 +1,84 @@
+#!/bin/sh
+#
+# Setup Ethernet over USB link using CDC EEM.
+#
+# Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+#
+
+CDC_EEM_DIR=/sys/kernel/config/usb_gadget/g1
+
+#
+# Create a CDC EEM gadget (requires CONFIG_USB_CONFIGFS_EEM).
+#
+# arg1: MAC address of host's end of this Ethernet over USB link
+# arg2: MAC address of device's end of this Ethernet over USB link
+#x
+setup_cdc_eem() {
+    [ -z "$1" ] && [ -z "$2" ] && return 0
+
+    # Mount USB gadget's configfs
+    modprobe libcomposite
+    mount -t configfs none /sys/kernel/config
+
+    # Create gadget dir and provide vid:pid
+    mkdir ${CDC_EEM_DIR}
+    cd ${CDC_EEM_DIR}
+    echo "0x1d6b" > idVendor    # Linux Foundation
+    echo "0x0102" > idProduct   # EEM Gadget
+
+    # Provide gadget identification
+    mkdir strings/0x409
+    echo "BC0001" > strings/0x409/serialnumber
+    echo "Linux Boot Research" > strings/0x409/manufacturer
+    echo "BeagleCam Project" > strings/0x409/product
+
+    # Create a gadget configuration and provide some attributes
+    mkdir configs/c.1
+    echo 120 > configs/c.1/MaxPower
+
+    # Create a function (name must match a usb_f_<name> module)
+    mkdir functions/eem.0   # usb_f_eem.ko gets loaded with request_module()
+
+    # Provide specific function attributes
+    echo "$1" > functions/eem.0/host_addr
+    echo "$2" > functions/eem.0/dev_addr
+
+    # Associate function with gadget configuration
+    ln -s functions/eem.0 configs/c.1
+
+    # Enable gadget by binding it to a UDC from /sys/class/udc/*
+    echo "musb-hdrc.0" > UDC
+}
+
+case "$1" in
+start)
+    . /lib/functions.sh
+
+    setup_cdc_eem \
+        "$(get_kern_param cdc_eem.host_addr)" \
+        "$(get_kern_param cdc_eem.dev_addr)"
+    ;;
+
+stop)
+    [ -e ${CDC_EEM_DIR}/UDC ] && {
+        # Unbind the CDC EEM Ethernet device
+        echo "" > ${CDC_EEM_DIR}/UDC
+
+        # FIXME: can't remove 'configs/c.1/MaxPower': Operation not permitted
+        #LOOP=20
+        #while [ $((LOOP = LOOP - 1)) -ge 0 ]; do
+        #    rm -rf ${CDC_EEM_DIR} >/dev/null 2>&1 && break
+        #    usleep 200000
+        #done
+    }
+    ;;
+
+restart|reload)
+    ;;
+
+*)
+    printf "Usage: %s {start|stop|restart}\n" "$0"
+    exit 1
+esac
+
+exit $?
