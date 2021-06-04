@@ -219,11 +219,10 @@ endef
 
 $(eval $(kconfig-component))
 
-# Support for rebuilding the kernel after the cpio archive has
-# been generated.
+# Support for rebuilding the kernel after the cpio archive has been generated.
 ifneq ($(LINUX_KERNEL_APPENDED_INITRAMFS),)
 LINUX_TARGET_REBUILD_WITH_INITRAMFS = $(LINUX_DIR)/.stamp_rebuild-with-initramfs
-$(LINUX_TARGET_REBUILD_WITH_INITRAMFS): $(LINUX_TARGET_INSTALL) $(LINUX_KERNEL_APPENDED_INITRAMFS)
+$(LINUX_TARGET_REBUILD_WITH_INITRAMFS): $(LINUX_TARGET_INSTALL) $(LINUX_KERNEL_APPENDED_INITRAMFS) | rootfs
 	@$(call MESSAGE,"Rebuilding kernel with initramfs")
 	# Build the kernel.
 	$(LINUX_MAKE_ENV) $(MAKE) $(LINUX_MAKE_FLAGS) -C $(LINUX_DIR) $(LINUX_TARGET_NAME)
