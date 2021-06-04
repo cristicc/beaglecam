@@ -1,0 +1,23 @@
+This is just a hack to ensure dropbear will not block when generating the
+host SSH key on receiving the first SSH connection.
+
+The issue is caused by the getrandom() system call which is waiting for
+the entropy pool to be initialized. Hence this patch disables this call
+and dropbear will switch using a less secure method to get random data.
+
+Signed-off-by: Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+---
+
+diff --git a/dbrandom.c.orig b/dbrandom.c
+index fa75c20..a238f01 100644
+--- a/dbrandom.c
++++ b/dbrandom.c
+@@ -241,7 +241,7 @@ void seedrandom() {
+ 	/* existing state */
+ 	sha1_process(&hs, (void*)hashpool, sizeof(hashpool));
+ 
+-#ifdef HAVE_GETRANDOM
++#if 0
+ 	if (process_getrandom(&hs) == DROPBEAR_SUCCESS) {
+ 		urandom_seeded = 1;
+ 	}
