@@ -4,9 +4,9 @@
 #
 # In terms of implementation, the component specific .mk file should specify
 # only the path of the buildroot defconfig file via $(PKG)_KCONFIG_FILE.
+# Optionally, also an external source directory via $(PKG)_BR2EXT_DIR.
 #
-# Additionally, in the defconfig file, you may use BASE_DIR to refer to the
-# component build directory $(PKG)_BUILDDIR.
+# Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 #
 
 #
@@ -54,6 +54,10 @@ endif
 
 # Call the kconfig package infra to generate the necessary make targets.
 $(call kconfig-component-helper,$(1),$(2))
+
+# Helper target to allow accessing buildroot subtargets.
+$(1)-stg-%:
+	$$($(2)_MAKE_ENV) $$($(2)_MAKE) $$($(2)_MAKE_OPTS) -C $$($(2)_BUILDDIR) $$*
 
 endef
 
