@@ -8,10 +8,7 @@
 set -e
 
 RUN_DIR=$(dirname "$(readlink -fn "$0")")
-
 PRJ_OUTPUT_DIR=${RUN_DIR}/../output/dev
-PRJ_BINARIES_DIR=${PRJ_OUTPUT_DIR}/binaries
-ROOTFS_BUILD_DIR=${PRJ_OUTPUT_DIR}/build/rootfs
 
 BEAGLECAM_STATIC_IPS="10.0.0.100 10.0.1.100"
 
@@ -50,7 +47,7 @@ update_components() {
             files="${files} ${PRJ_BINARIES_DIR}/MLO ${PRJ_BINARIES_DIR}/u-boot.img"
             ;;
         kernel)
-            files="${files} ${PRJ_BINARIES_DIR}/zImage ${PRJ_BINARIES_DIR}/am335x-boneblack-lcd43.dtb"
+            files="${files} ${PRJ_BINARIES_DIR}/zImage ${PRJ_BINARIES_DIR}/am335x-boneblack-pru.dtb"
             ;;
         rootfs)
             files="${files} ${PRJ_BINARIES_DIR}/rootfs.cpio"
@@ -100,8 +97,13 @@ Usage:
 Options:
   -h, --help    Show this help message.
 
-  -t, --target  Target device hostname or IP address. By default it is
-                autodetected using a set of preconfigured IPs.
+  -o, --output-dir DIR
+                The path to the project build output directory. The default
+                path is: ${PRJ_OUTPUT_DIR}
+
+  -t, --target IP_ADDRESS
+                Target device IP address. By default it is autodetected using
+                a set of preconfigured IPs: ${BEAGLECAM_STATIC_IPS}
 
   -u, --update COMPONENT[,COMPONENT..]
                 Perform a software upgrade of the given component(s):
@@ -119,6 +121,11 @@ while [ $# -gt 0 ]; do
     -h|--help)
         print_usage
         exit 0
+        ;;
+
+    -o|--output-dir)
+        shift
+        PRJ_OUTPUT_DIR=$1
         ;;
 
     -t|--target)
@@ -144,6 +151,14 @@ while [ $# -gt 0 ]; do
 
     shift
 done
+
+[ -d "${PRJ_OUTPUT_DIR}" ] || {
+    printf "Invalid project build output directory: %s\n" "${PRJ_OUTPUT_DIR}"
+    exit 1
+}
+
+PRJ_BINARIES_DIR=${PRJ_OUTPUT_DIR}/binaries
+ROOTFS_BUILD_DIR=${PRJ_OUTPUT_DIR}/build/rootfs
 
 [ -z "${BEAGLECAM_REMOTE_IP}" ] && { autodetect_ip || exit $?; }
 
