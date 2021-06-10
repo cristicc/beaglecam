@@ -29,13 +29,14 @@ IMPORTANT: This is currently a work in progress..
 == Intro
 
 This is an experimental embedded Linux OS and application for BeagleBone Black
- <<RefBeagleBoneBlack>> to capture video frames from a OV7670 VGA Camera Module
- <<RefOV7670CamModule>> and display them via a 4.3" LCD Display Cape <<BBDisplayCape>>.
+ <<RefBeagleBoneBlack>> to capture video frames from an OV7670 VGA Camera Module
+ <<RefOV7670CamModule>> via <<BeagleBone Black PRUSS,PRUSS>> and display them
+on a 4.3" LCD Display <<BBDisplayCape>>.
 
 The main purpose of this project is to continue and, if possible, to improve the
 work done in the context of Bootlin's excellent _Embedded Linux boot time optimization
-training_ <<RefBootlinTrainingBootTime>>, which I strongly recommend to anyone looking
-for solutions to optimize the boot time of Linux-based operating systems.
+training_ <<RefBootlinTrainingBootTime>>, which I strongly recommend to anyone
+looking for solutions to optimize the boot time of Linux-based operating systems.
 
 The boot duration is measured using an Arduino Nano 33 BLE board <<RefArduinoNano33BLE>>,
 from BeagleBone Black's system reset until the first video frame is captured from
@@ -86,20 +87,30 @@ endif::[]
 image::beaglecam-prototype.svg[]
 
 
-=== BeagleBone Black
+=== BeagleBone Black PRUSS
+
+The Programmable Real-Time Unit and Industrial Communication Subsystem (PRU-ICSS
+a.k.a. PRUSS) is present on various TI SoCs, including AM335x which BeagleBone
+Black relies on.
+
+A PRUSS consists of dual 32-bit RISC cores (Programmable Real-Time Units, or
+PRUs), shared RAM, data and instruction RAMs, some internal peripheral modules
+to facilitate industrial communication and an interrupt controller.
+
+The programmable nature of the PRUs provide flexibility to implement custom
+peripheral interfaces, fast real-time responses or specialized data handling.
 
 [NOTE]
-Please refer to the BeagleBone Black product page <<RefBeagleBoneBlack>>.
+For more details, please refer to BeagleBone Black's product page <<RefBeagleBoneBlack>>,
+the AM335x Technical Reference Manual <<RefAm335xTRM>> or elinux.org <<RefAm33xxPrussv2>>.
 
-==== PRU Pins
+
+PRU Pins::
 
 There are 16 input pins (and 16 output) pins per PRU core, but not all of these
 are accessible on the BeagleBone Black. Additionally, some of them are already
 in use by the LCD cape, hence we can only access less than half of the inputs
 (see the table below for more details about the available pins).
-
-[NOTE]
-For more details about the Programmable Real-time Unit Sub System, please see <<RefAm33xxPrussv2>>.
 
 .BeagleBone PRU input pins for capturing camera frames via `D0-D7`, `PCLK`, `HREF` and `VSYNC`
 |===
@@ -350,7 +361,7 @@ The generated images are stored in the `binaries` folder:
 
 [source,sh]
 $ ls -1 binaries/
-am335x-boneblack-lcd43.dtb
+am335x-boneblack-pru.dtb
 boot.vfat
 MLO
 rootfs.cpio
@@ -466,6 +477,105 @@ MMC erase: dev # 1, block # 0, count 1024 ... 1024 blocks erased: OK
 ====
 
 
+=== Establish network connectivity
+
+The OS running on BeagleBone (_BeagleCamOS_) provides a SSH service on the
+standard port 22. Login using the user `root`, password `root`. Use one of the
+connectivity methods described bellow.
+
+Ethernet via the RJ45 port::
+
+Connect BeagleBone board to host PC using an UTP cable.
+Set the host IP address to `10.0.0.1` or anything else in the `10.0.0.255`
+sub-network, except `10.0.0.100` which is used by BeagleBone.
+
+Ethernet via the mini USB port::
+
+_BeagleCamOs_ is configured to support ethernet over USB link using CDC EEM.
+After connecting the device to the host system via USB, a new Ethernet network
+should be detected and listed as `Linux Foundation EEM Gadget`. Manually set an
+IP address in the `10.0.1.255` sub-network, except `10.0.1.100` which is already
+set on BeagleBone side.
+
+[TIP]
+====
+It is also possible to run remote commands without entering the login password,
+via the `ssh-cmd.sh` utility script in the `tools` folder. This is achieved by
+using a SSH key pair generated during the build process:
+
+[source,sh,subs="attributes+"]
+$ ls -l {DEV_OUTPUT_DIR}/build/rootfs/target/root/.ssh/
+authorized_keys  beaglecam-id_ecdsa
+
+The `authorized_keys` file contains the SSH public key and is part of the OS
+image, while `beaglecam-id_ecdsa` is the SSH private key and is installed on
+the host when running the utility script for the first time.
+
+[source,sh,subs="attributes+"]
+----
+{PROJECT_DIR}/tools/ssh-cmd.sh -o {DEV_OUTPUT_DIR} cat /etc/os-release
+
+Testing SSH access
+Linux beaglecam 5.11.11 #12 SMP Tue Jun 1 15:35:33 UTC 2021 armv7l GNU/Linux
+
+Executing remote cmd: cat /etc/os-release
+NAME="BeagleCam OS"
+VERSION="0.1 (dev)"
+ID=beaglecamos
+VERSION_ID=0.1"
+PRETTY_NAME="BeagleCam Development OS"
+----
+====
+
+
+=== Test Linux kernel communication with PRUs
+
+Run the command below to deploy a sample PRU firmware generated during the build
+of the `pru-software-support` package, part of the `rootfs` component.
+
+[source,sh,subs="attributes+"]
+----
+$ scp {DEV_OUTPUT_DIR}/build/rootfs/build/pru-software-support-5.7.0/labs/Hands_on_Labs/lab_5/solution/am335x/PRU_RPMsg_Echo_Interrupt1/gen/PRU_RPMsg_Echo_Interrupt1.out root@10.0.0.100:/lib/firmware/am335x-pru1-fw
+----
+
+Switch to BeagleBone remote terminal:
+
+[source,sh]
+----
+root@beaglecam:~# modprobe -a virtio_rpmsg_bus pru_rproc
+[ 9661.513324] remoteproc remoteproc0: 4a334000.pru is available
+[ 9661.519675] remoteproc remoteproc1: 4a338000.pru is available
+
+root@beaglecam:~# cat /sys/class/remoteproc/remoteproc1/state
+offline
+
+root@beaglecam:~# cat /sys/kernel/debug/remoteproc/remoteproc1/regs
+============== Control Registers ==============
+CTRL      := 0x00000001
+STS (PC)  := 0x00000000 (0x00000000)
+[...]
+
+root@beaglecam:~# echo start > /sys/class/remoteproc/remoteproc1/state
+[  385.220140] remoteproc remoteproc1: powering up 4a338000.pru
+[  385.233104] remoteproc remoteproc1: Booting fw image am335x-pru1-fw, size 75688
+[  385.300276]  remoteproc1#vdev0buffer: registered virtio0 (type 7)
+[  385.306469] remoteproc remoteproc1: remote processor 4a338000.pru is now up
+
+root@beaglecam:~# cat /sys/kernel/debug/remoteproc/remoteproc1/regs
+============== Control Registers ==============
+CTRL      := 0x00008003
+STS (PC)  := 0x0000004c (0x00000130)
+[...]
+
+root@beaglecam:~# modprobe rpmsg_client_sample
+[15347.774182] rpmsg_client_sample virtio0.rpmsg-client-sample.-1.31: new channel: 0x400 -> 0x1f!
+[15347.783407] rpmsg_client_sample virtio0.rpmsg-client-sample.-1.31: incoming msg 1 (src: 0x1f)
+[...]
+[15348.644605] rpmsg_client_sample virtio0.rpmsg-client-sample.-1.31: incoming msg 100 (src: 0x1f)
+[15348.653355] rpmsg_client_sample virtio0.rpmsg-client-sample.-1.31: goodbye!
+----
+
+
 [#enable-falcon]
 === Enable U-Boot Falcon mode
 
@@ -536,4 +646,5 @@ First frame decoded!
 * [[[RefBootlinTrainingBootTime,4]]] Bootlin's Embedded Linux boot time optimization training: https://bootlin.com/training/boot-time/
 * [[[RefArduinoNano33BLE,5]]] Arduino Nano 33 BLE: https://store.arduino.cc/arduino-nano-33-ble
 * [[[RefMidasLCD,6]]] Midas 16x2 I2C Alphanumeric LCD: https://uk.farnell.com/midas/mccog21605b6w-fptlwi/lcd-cog-16x2-i2c-fstn-blk-on-white/dp/2218942
-* [[[RefAm33xxPrussv2,7]]] Ti AM33XX PRUSSv2: https://elinux.org/Ti_AM33XX_PRUSSv2
+* [[[RefAm335xTRM,7]]] AM335x and AMIC110 Sitara™ Processors Technical Reference Manual: https://www.ti.com/lit/ug/spruh73q/spruh73q.pdf
+* [[[RefAm33xxPrussv2,8]]] Ti AM33XX PRUSSv2: https://elinux.org/Ti_AM33XX_PRUSSv2
