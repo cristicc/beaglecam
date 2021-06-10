@@ -170,7 +170,7 @@ include util/pkg-kconfig.mk
 include $(sort $(wildcard component/*/*.mk))
 
 #
-# Generate project build targets faking a generic package.
+# Generate project build targets faking a generic package named 'prj'.
 #
 define STRIP_PROJECT_BINARIES
 	@$(call MESSAGE,"Stripping binaries")

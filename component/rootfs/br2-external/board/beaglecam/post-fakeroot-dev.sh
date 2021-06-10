@@ -13,4 +13,5 @@ sed -i "s|@OS_VER@|${PRJ_VERSION}|" \
 rm -rf \
     etc/issue \
     root/.ssh/beaglecam-id_ecdsa \
-    usr/share/pru-software-support{am437x,am572x,am65x,j721e,k2g} \
+    usr/share/ffmpeg \
+    usr/share/pru-software-support \
