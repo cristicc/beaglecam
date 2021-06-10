@@ -1,0 +1,170 @@
+Add support for the optional rpmsg stack using the virtio-ring based
+communication transport between MPU and a PRU core.
+
+The virtio-ring signalling support is provided through two PRU system events:
+one event used in each direction for kicking from one processor and receiving
+notification on the other processor.
+
+This is a simplified version of the Roger Quadros' original patch [1] by
+dropping the OMAP mailbox signalling alternative.
+
+[1] [PATCH v2 12/14] remoteproc/pru: Add support for virtio rpmsg stack
+    https://lore.kernel.org/linux-omap/1549290167-876-13-git-send-email-rogerq@ti.com/
+
+Signed-off-by: Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+---
+
+diff --git a/drivers/remoteproc/pru_rproc.c b/drivers/remoteproc/pru_rproc.c
+index 2667919..51b1aa4 100644
+--- a/./drivers/remoteproc/pru_rproc.c.orig
++++ b/./drivers/remoteproc/pru_rproc.c
+@@ -12,6 +12,7 @@
+ 
+ #include <linux/bitops.h>
+ #include <linux/debugfs.h>
++#include <linux/interrupt.h>
+ #include <linux/irqdomain.h>
+ #include <linux/module.h>
+ #include <linux/of_device.h>
+@@ -115,6 +116,8 @@ struct pru_private_data {
+  * @mapped_irq: virtual interrupt numbers of created fw specific mapping
+  * @pru_interrupt_map: pointer to interrupt mapping description (firmware)
+  * @pru_interrupt_map_sz: pru_interrupt_map size
++ * @irq_ring: IRQ number to use for processing vring buffers
++ * @irq_kick: IRQ number to use to perform virtio kick
+  * @dbg_single_step: debug state variable to set PRU into single step mode
+  * @dbg_continuous: debug state variable to restore PRU execution mode
+  * @evt_count: number of mapped events
+@@ -130,6 +133,8 @@ struct pru_rproc {
+ 	unsigned int *mapped_irq;
+ 	struct pru_irq_rsc *pru_interrupt_map;
+ 	size_t pru_interrupt_map_sz;
++	int irq_vring;
++	int irq_kick;
+ 	u32 dbg_single_step;
+ 	u32 dbg_continuous;
+ 	u8 evt_count;
+@@ -346,6 +351,31 @@ static int pru_handle_intrmap(struct rproc *rproc)
+ 	return ret;
+ }
+ 
++/**
++ * pru_rproc_vring_interrupt() - interrupt handler for processing vrings
++ * @irq: irq number associated with the PRU event MPU is listening on
++ * @data: interrupt handler data, will be a PRU rproc structure
++ *
++ * This handler is used by the PRU remoteproc driver when using PRU system
++ * events for processing the virtqueues. Unlike the mailbox IP, there is
++ * no payload associated with an interrupt, so either a unique event is
++ * used for each virtqueue kick, or a both virtqueues are processed on
++ * a single event. The latter is chosen to conserve the usable PRU system
++ * events.
++ */
++static irqreturn_t pru_rproc_vring_interrupt(int irq, void *data)
++{
++	struct pru_rproc *pru = data;
++
++	dev_dbg(&pru->rproc->dev, "got vring irq\n");
++
++	/* process incoming buffers on both the Rx and Tx vrings */
++	rproc_vq_interrupt(pru->rproc, 0);
++	rproc_vq_interrupt(pru->rproc, 1);
++
++	return IRQ_HANDLED;
++}
++
+ static int pru_rproc_start(struct rproc *rproc)
+ {
+ 	struct device *dev = &rproc->dev;
+@@ -367,6 +397,24 @@ static int pru_rproc_start(struct rproc *rproc)
+ 	if (ret)
+ 		return ret;
+ 
++	if (!list_empty(&pru->rproc->rvdevs)) {
++		if (pru->irq_vring <= 0 || pru->irq_kick <= 0) {
++			dev_err(dev, "virtio vring interrupt mechanisms are not provided\n");
++			return -EINVAL;
++		}
++
++		ret = request_threaded_irq(pru->irq_vring, NULL,
++					   pru_rproc_vring_interrupt,
++					   IRQF_ONESHOT, dev_name(dev),
++					   pru);
++		if (ret) {
++			dev_err(dev, "failed to enable vring interrupt, ret = %d\n",
++				ret);
++			return ret;
++		}
++	}
++
++
+ 	val = CTRL_CTRL_EN | ((rproc->bootaddr >> 2) << 16);
+ 	pru_control_write_reg(pru, PRU_CTRL_CTRL, val);
+ 
+@@ -390,9 +438,32 @@ static int pru_rproc_stop(struct rproc *rproc)
+ 	if (pru->mapped_irq)
+ 		pru_dispose_irq_mapping(pru);
+ 
++	if (!list_empty(&pru->rproc->rvdevs) && pru->irq_vring > 0)
++		free_irq(pru->irq_vring, pru);
++
+ 	return 0;
+ }
+ 
++/* Defined in irq-pruss-intc.c */
++int pruss_intc_trigger(unsigned int irq);
++
++static void pru_rproc_kick(struct rproc *rproc, int vq_id)
++{
++	struct device *dev = &rproc->dev;
++	struct pru_rproc *pru = rproc->priv;
++	const char *names[PRU_TYPE_MAX] = { "PRU", "RTU", "Tx_PRU" };
++	int ret;
++
++	dev_dbg(dev, "kicking vqid %d on %s%d\n",
++		vq_id, names[pru->data->type], pru->id);
++
++	if (pru->irq_kick > 0) {
++		ret = pruss_intc_trigger(pru->irq_kick);
++		if (ret < 0)
++			dev_err(dev, "pruss_intc_trigger failed: %d\n", ret);
++	}
++}
++
+ /*
+  * Convert PRU device address (data spaces only) to kernel virtual address.
+  *
+@@ -489,6 +560,7 @@ static void *pru_da_to_va(struct rproc *rproc, u64 da, size_t len, bool is_iram)
+ static struct rproc_ops pru_rproc_ops = {
+ 	.start		= pru_rproc_start,
+ 	.stop		= pru_rproc_stop,
++	.kick		= pru_rproc_kick,
+ 	.da_to_va	= pru_rproc_da_to_va,
+ };
+ 
+@@ -800,6 +872,25 @@ static int pru_rproc_probe(struct platform_device *pdev)
+ 
+ 	platform_set_drvdata(pdev, rproc);
+ 
++	/* get optional vring and kick interrupts for supporting virtio rpmsg */
++	pru->irq_vring = platform_get_irq_byname(pdev, "vring");
++	if (pru->irq_vring <= 0) {
++		ret = pru->irq_vring;
++		if (ret == -EPROBE_DEFER)
++			return ret;
++		dev_dbg(dev, "unable to get vring interrupt, status = %d\n",
++			ret);
++	}
++
++	pru->irq_kick = platform_get_irq_byname(pdev, "kick");
++	if (pru->irq_kick <= 0) {
++		ret = pru->irq_kick;
++		if (ret == -EPROBE_DEFER)
++			return ret;
++		dev_dbg(dev, "unable to get kick interrupt, status = %d\n",
++			ret);
++	}
++
+ 	ret = devm_rproc_add(dev, pru->rproc);
+ 	if (ret) {
+ 		dev_err(dev, "rproc_add failed: %d\n", ret);
