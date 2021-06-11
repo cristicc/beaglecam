@@ -530,12 +530,12 @@ PRETTY_NAME="BeagleCam Development OS"
 
 === Test Linux kernel communication with PRUs
 
-Run the command below to deploy a sample PRU firmware generated during the build
-of the `pru-software-support` package, part of the `rootfs` component.
+Run the command below to deploy a test firmware for PRU1 generated during the
+build of the `prufw` custom buildroot package, part of the `rootfs` component:
 
 [source,sh,subs="attributes+"]
 ----
-$ scp {DEV_OUTPUT_DIR}/build/rootfs/build/pru-software-support-5.7.0/labs/Hands_on_Labs/lab_5/solution/am335x/PRU_RPMsg_Echo_Interrupt1/gen/PRU_RPMsg_Echo_Interrupt1.out root@10.0.0.100:/lib/firmware/am335x-pru1-fw
+$ scp {DEV_OUTPUT_DIR}/build/rootfs/build/prufw/gen/prufw1-test.out root@10.0.0.100:/lib/firmware/am335x-pru1-fw
 ----
 
 Switch to BeagleBone remote terminal:

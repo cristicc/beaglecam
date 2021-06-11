@@ -1,1 +1,1 @@
-#source "$BR2_EXTERNAL_BEAGLECAM_ROOTFS_PATH/package/custom/Config.in"
+source "$BR2_EXTERNAL_BEAGLECAM_ROOTFS_PATH/package/prufw/Config.in"

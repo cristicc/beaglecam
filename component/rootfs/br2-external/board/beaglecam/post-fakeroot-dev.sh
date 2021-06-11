@@ -13,5 +13,4 @@ sed -i "s|@OS_VER@|${PRJ_VERSION}|" \
 rm -rf \
     etc/issue \
     root/.ssh/beaglecam-id_ecdsa \
-    usr/share/ffmpeg \
-    usr/share/pru-software-support \
+    usr/share/ffmpeg

@@ -1,0 +1,7 @@
+config BR2_PACKAGE_PRUFW
+	bool "prufw"
+	depends on BR2_PACKAGE_HOST_TI_CGT_PRU_ARCH_SUPPORTS
+	select BR2_PACKAGE_HOST_PRU_SOFTWARE_SUPPORT
+	help
+	  Firmware for PRU0 and PRU1 cores to read data from the camera sensor
+	  and send it to the linux kernel via RPMSG.
