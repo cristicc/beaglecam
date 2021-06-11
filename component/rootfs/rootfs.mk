@@ -1,6 +1,6 @@
 ROOTFS_BR2EXT_DIR = $(ROOTFS_PKGDIR)/br2-external
 ROOTFS_KCONFIG_FILE = $(ROOTFS_BR2EXT_DIR)/configs/$(call qstrip,$(PRJ_ROOTFS_DEFCONFIG))_defconfig
-ROOTFS_DEPENDENCIES = linux
+ROOTFS_DEPENDENCIES = linux rpmsgcam
 
 ROOTFS_MAKE_ENV = \
 	PRJ_TOOLCHAIN_PATH=$(patsubst %/bin/,%,$(dir $(call qstrip,$(PRJ_TOOLCHAIN_PATH)))) \
