@@ -165,6 +165,7 @@ include util/pkg-generic.mk
 include util/pkg-autotools.mk
 include util/pkg-br-target.mk
 include util/pkg-kconfig.mk
+include util/pkg-kernel-module.mk
 
 # Include project components.
 include $(sort $(wildcard component/*/*.mk))
