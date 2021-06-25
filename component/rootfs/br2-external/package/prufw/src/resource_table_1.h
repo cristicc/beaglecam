@@ -83,7 +83,7 @@ struct my_resource_table resourceTable = {
 		(uint32_t)TYPE_VDEV,                    //type
 		(uint32_t)VIRTIO_ID_RPMSG,              //id
 		(uint32_t)0,                            //notifyid
-		(uint32_t)RPMSG_PRU_C0_FEATURES,	//dfeatures
+		(uint32_t)RPMSG_PRU_C0_FEATURES,        //dfeatures
 		(uint32_t)0,                            //gfeatures
 		(uint32_t)0,                            //config_len
 		(uint8_t)0,                             //status

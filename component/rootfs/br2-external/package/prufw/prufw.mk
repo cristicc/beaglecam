@@ -14,6 +14,7 @@ define PRUFW_BUILD_CMDS
 endef
 
 define PRUFW_INSTALL_TARGET_CMDS
+	$(INSTALL) -m 0644 -D $(@D)/gen/prufw0.out $(TARGET_DIR)/lib/firmware/am335x-pru0-fw
 	$(INSTALL) -m 0644 -D $(@D)/gen/prufw1.out $(TARGET_DIR)/lib/firmware/am335x-pru1-fw
 endef
 

@@ -26,23 +26,28 @@ LFLAGS=--reread_libs --warn_sections --stack_size=$(STACK_SIZE) --heap_size=$(HE
 
 TARGET0=$(GEN_DIR)/$(PROJ_NAME)0.out
 MAP0=$(GEN_DIR)/$(PROJ_NAME)0.map
-SOURCES0=main0.c
+SOURCES0=main-pru0.c
 #Using .object instead of .obj in order to not conflict with the CCS build process
 OBJECTS0=$(patsubst %,$(GEN_DIR)/%,$(SOURCES0:.c=.object))
 
 TARGET1=$(GEN_DIR)/$(PROJ_NAME)1.out
 MAP1=$(GEN_DIR)/$(PROJ_NAME)1.map
-SOURCES1=main1.c
+SOURCES1=main-pru1.c
 #Using .object instead of .obj in order to not conflict with the CCS build process
 OBJECTS1=$(patsubst %,$(GEN_DIR)/%,$(SOURCES1:.c=.object))
 
 TARGET1_TEST=$(GEN_DIR)/$(PROJ_NAME)1-test.out
 MAP1_TEST=$(GEN_DIR)/$(PROJ_NAME)1-test.map
-SOURCES1_TEST=main1-test.c
+SOURCES1_TEST=main-pru1-test.c
 #Using .object instead of .obj in order to not conflict with the CCS build process
 OBJECTS1_TEST=$(patsubst %,$(GEN_DIR)/%,$(SOURCES1_TEST:.c=.object))
 
-all: $(TARGET1) $(TARGET1_TEST)
+all: $(TARGET0) $(TARGET1) $(TARGET1_TEST)
+
+# Invokes the linker (-z flag) to make the .out file
+$(TARGET0): $(OBJECTS0) $(LINKER_COMMAND_FILE)
+	@echo 'Building target: $@'
+	$(PRU_CGT)/bin/clpru $(CFLAGS) -z -i$(PRU_CGT)/lib -i$(PRU_CGT)/include $(LFLAGS) -o $(TARGET0) $(OBJECTS0) -m$(MAP0) $(LINKER_COMMAND_FILE) --library=libc.a
 
 # Invokes the linker (-z flag) to make the .out file
 $(TARGET1): $(OBJECTS1) $(LINKER_COMMAND_FILE)
