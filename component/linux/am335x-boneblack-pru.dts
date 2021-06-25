@@ -79,9 +79,6 @@
 
 	bb_lcd_lcd_pins: pinmux_bb_lcd_lcd_pins {
 		pinctrl-single,pins = <
-			/* Bootlin boot time labs: use idle pin as custom GPIO on P9_13 */
-			AM33XX_PADCONF(AM335X_PIN_GPMC_WPN, PIN_OUTPUT, MUX_MODE7)
-
 			AM33XX_PADCONF(AM335X_PIN_LCD_DATA0, PIN_OUTPUT, MUX_MODE0)			/* lcd_data0 */
 			AM33XX_PADCONF(AM335X_PIN_LCD_DATA1, PIN_OUTPUT, MUX_MODE0)			/* lcd_data1 */
 			AM33XX_PADCONF(AM335X_PIN_LCD_DATA2, PIN_OUTPUT, MUX_MODE0)			/* lcd_data2 */
@@ -102,6 +99,16 @@
 			AM33XX_PADCONF(AM335X_PIN_LCD_HSYNC, PIN_OUTPUT, MUX_MODE0)			/* lcd_hsync */
 			AM33XX_PADCONF(AM335X_PIN_LCD_PCLK, PIN_OUTPUT, MUX_MODE0)			/* lcd_pclk */
 			AM33XX_PADCONF(AM335X_PIN_LCD_AC_BIAS_EN, PIN_OUTPUT, MUX_MODE0)	/* lcd_ac_bias_en */
+		>;
+	};
+
+	beaglecam_pins: pinmux_beaglecam_pins {
+		pinctrl-single,pins = <
+			/* GPIO ouput on P9_13 to signal system boot completion */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_WPN, PIN_OUTPUT, MUX_MODE7)
+
+			/* PRU1 output on P8_20 to control a diagnosis LED */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN2, PIN_OUTPUT, MUX_MODE5)
 		>;
 	};
 };
