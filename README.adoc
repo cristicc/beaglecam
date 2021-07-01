@@ -128,7 +128,7 @@ in use by the LCD cape, hence we can only access less than half of the inputs
 | 0    | 15      | P8_15     | GPIO1_15    | gpmc_ad15     | Mode_6      | PCLK  |
 | 0    | 16      | P9_24     | UART1_TXD   | uart1_txd     | Mode_6      | HREF  |
 | 1    | 12      | P8_21     | GPIO1_30    | gpmc_csn1     | Mode_6      | VSYNC |
-| 1    | 13      | P8_20     | GPIO1_31    | gpmc_csn2     | Mode_6      |       | Not used
+| 1    | 13      | P8_20     | GPIO1_31    | gpmc_csn2     | Mode_6      |       | See <<pru-pins-note3>>
 | 1    | 16      | P9_26     | UART1_RXD   | uart1_rxd     | Mode_6      |       | Not used
 |===
 
@@ -144,6 +144,10 @@ It is necessary to set GPIO0_7 to *input* mode via pinmuxing.
 Note 2::
 Bit 6 of the PRU0 registers 30 & 31 (`GPIO3_20`) is routed to P9_41 (`GPIO0_20` / `CLKOUT2`).
 It is necessary to set `GPIO0_20` to *input* mode via pinmuxing.
+
+[[pru-pins-note3,Note3]]
+Note 3::
+Bit 13 of the PRU1 register 30 (`GPIO1_31`) is used to control a diagnosis LED.
 
 [[pru-pins-conflict,Conflict]]
 Conflict::
@@ -479,9 +483,9 @@ MMC erase: dev # 1, block # 0, count 1024 ... 1024 blocks erased: OK
 
 === Establish network connectivity
 
-The OS running on BeagleBone (_BeagleCamOS_) provides a SSH service on the
-standard port 22. Login using the user `root`, password `root`. Use one of the
-connectivity methods described bellow.
+When building the project via `dev` profile, the generated OS image provides
+networking capabilities and a SSH service listening on the standard port 22.
+Login with `root/root` using any of the connectivity methods described below.
 
 Ethernet via the RJ45 port::
 
@@ -535,7 +539,7 @@ build of the `prufw` custom buildroot package, part of the `rootfs` component:
 
 [source,sh,subs="attributes+"]
 ----
-$ scp {DEV_OUTPUT_DIR}/build/rootfs/build/prufw/gen/prufw1-test.out root@10.0.0.100:/lib/firmware/am335x-pru1-fw
+$ scp {DEV_OUTPUT_DIR}/build/rootfs/build/prufw/gen/prufw1-test.out root@10.0.1.100:/lib/firmware/am335x-pru1-fw
 ----
 
 Switch to BeagleBone remote terminal:
@@ -556,10 +560,10 @@ STS (PC)  := 0x00000000 (0x00000000)
 [...]
 
 root@beaglecam:~# echo start > /sys/class/remoteproc/remoteproc1/state
-[  385.220140] remoteproc remoteproc1: powering up 4a338000.pru
-[  385.233104] remoteproc remoteproc1: Booting fw image am335x-pru1-fw, size 75688
-[  385.300276]  remoteproc1#vdev0buffer: registered virtio0 (type 7)
-[  385.306469] remoteproc remoteproc1: remote processor 4a338000.pru is now up
+[12385.220140] remoteproc remoteproc1: powering up 4a338000.pru
+[12385.233104] remoteproc remoteproc1: Booting fw image am335x-pru1-fw, size 75688
+[12385.300276]  remoteproc1#vdev0buffer: registered virtio0 (type 7)
+[12385.306469] remoteproc remoteproc1: remote processor 4a338000.pru is now up
 
 root@beaglecam:~# cat /sys/kernel/debug/remoteproc/remoteproc1/regs
 ============== Control Registers ==============
@@ -573,6 +577,45 @@ root@beaglecam:~# modprobe rpmsg_client_sample
 [...]
 [15348.644605] rpmsg_client_sample virtio0.rpmsg-client-sample.-1.31: incoming msg 100 (src: 0x1f)
 [15348.653355] rpmsg_client_sample virtio0.rpmsg-client-sample.-1.31: goodbye!
+
+root@beaglecam:~# echo stop > /sys/class/remoteproc/remoteproc1/state
+[184246.660551] remoteproc remoteproc1: stopped remote processor 4a338000.pru
+----
+
+=== Update PRU firmware and RPMSG camera driver
+
+The main PRU firmware sources are `component/rootfs/br2-external/package/prufw/src/main-pru{0,1}.c`
+while the related kernel module is `component/rpmsgcam/rpmsg_cam.c`. The corresponding
+binaries can be quickly rebuild, redeployed and tested by using the commands below:
+
+[source,sh]
+----
+# Rebuild firmware for PRU0 & PRU1
+$ make rootfs-stg-prufw-rebuild
+
+# Rebuild out-of-tree kernel driver
+$ make rpmsgcam-rebuild
+
+# Regenerate rootfs image
+$ make rootfs-rebuild
+
+# Deploy images on BeagleBone (drop 'kernel' if config & DTS have not changed)
+$ tools/ssh-cmd.sh -t 10.0.1.100 -u rootfs,kernel
+
+# After device rebooted, load the required modules and start the PRU cores
+$ tools/ssh-cmd.sh -t 10.0.1.100 'prefix=/sys/class/remoteproc/remoteproc; modprobe -a virtio_rpmsg_bus pru_rproc rpmsg_cam; echo start >${prefix}0/state; echo start >${prefix}1/state;'
+----
+
+It is also possible to further test updated PRU firmware without rebuilding
+the rootfs and rebooting the device:
+
+[source,sh,subs="attributes+"]
+----
+# Copy the firmware files to device (note this is not persisted to disk!)
+$ scp {DEV_OUTPUT_DIR}/build/rootfs/target/lib/firmware/* root@10.0.1.100:/lib/firmware/
+
+# Restart PRU cores to use the updated firmware files
+$ tools/ssh-cmd.sh -t 10.0.1.100 'prefix=/sys/class/remoteproc/remoteproc; echo stop >${prefix}0/state; echo start >${prefix}0/state; echo stop >${prefix}1/state; echo start >${prefix}1/state'
 ----
 
 
