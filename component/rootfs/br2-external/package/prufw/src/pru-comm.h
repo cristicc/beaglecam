@@ -7,11 +7,11 @@
 #ifndef _PRU_COMM_H
 #define _PRU_COMM_H
 
-/* PRU0-to-PRU1 XFER */
-typedef struct {
-	uint32_t reg5;
-	uint32_t reg6;
-} bufferData;
+/* Data captured from camera module, used in PRU0-to-PRU1 XFER */
+struct cap_data {
+	uint32_t seq;	/* Sequence number for error detection */
+	uint32_t data;	/* LSB contains one byte of pixel data */
+};
 
 /* PRU1-to-PRU0 interrupt as defined in the Linux DT */
 #define PRU1_PRU0_INTERRUPT		17
@@ -30,9 +30,13 @@ typedef struct {
 
 #define READ_PIN(bit)			(__R31 >> (bit)) & 1
 
+/* Diagnosis via LED blinking */
+#define LED_DIAG_ENABLED
+
 #ifndef LED_DIAG_ENABLED
 #define BLINK_LED(pin, hz)		((void)0)
 #else
+/* Assuming PRU cores run at 200 MHz */
 #define BLINK_LED(pin, hz)				\
 	do {						\
 		WRITE_PIN(pin, HIGH);			\

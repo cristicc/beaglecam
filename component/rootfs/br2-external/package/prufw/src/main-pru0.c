@@ -49,15 +49,11 @@ volatile register uint32_t __R31;
 
 void main(void)
 {
-	bufferData buf;
+	struct cap_data buf;
 
 	/* Clear the status of all interrupts */
 	CT_INTC.SECR0 = 0xFFFFFFFF;
 	CT_INTC.SECR1 = 0xFFFFFFFF;
-
-	/* Load the buffer with sample values to transfer */
-	buf.reg5 = 0xDEADBEEF;
-	buf.reg6 = 0x12345678;
 
 	/*
 	 * Poll until R31.30 (PRU0 interrupt) is set; this signals
@@ -66,11 +62,17 @@ void main(void)
 	while ((__R31 & HOST_INT) == 0) {
 	}
 
-	/*
-	 * XFR registers R5-R6 from PRU0 to PRU1.
-	 * 14 is the device_id that signifies a PRU to PRU transfer.
-	 */
-	__xout(14, 5, 0, buf);
+	for (buf.seq = 1; buf.seq <= 10; buf.seq++) {
+		buf.data = 0xBBBCAA00 + buf.seq;
+
+		/*
+		 * XFR registers R5-R6 from PRU0 to PRU1.
+		 * 14 is the device_id that signifies a PRU to PRU transfer.
+		 */
+		__xout(14, 5, 0, buf);
+
+		/*__delay_cycles(40);*/
+	}
 
 	/* Clear the status of the interrupt */
 	CT_INTC.SICR = PRU1_PRU0_INTERRUPT;

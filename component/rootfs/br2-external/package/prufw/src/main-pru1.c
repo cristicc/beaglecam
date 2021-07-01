@@ -62,7 +62,6 @@ volatile register uint32_t __R31;
 #define VIRTIO_CONFIG_S_DRIVER_OK	4
 
 /* Diagnosis via LED blinking */
-#define LED_DIAG_ENABLED
 #define PIN_LED				13 /* P8_20 */
 
 /*
@@ -96,23 +95,23 @@ uint8_t run_state = SM_STOPPED;
 uint8_t cur_seq_num = 0;
 uint8_t arm_recv_buf[RPMSG_MESSAGE_SIZE];
 
-bufferData pru0_recv_buf;
-
 /*
  * Initialize PRU core.
  */
 void init_pru_core()
 {
+	uint8_t blinks;
+
 	/*
 	 * Allow OCP master port access by the PRU, so the PRU can read
 	 * external memories.
 	 */
 	CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
-	/* 3 Hz LED blink */
-	BLINK_LED(PIN_LED, 3);
-	BLINK_LED(PIN_LED, 3);
-	BLINK_LED(PIN_LED, 3);
+	/* 3 Hz LED blink for 2 seconds */
+	for (blinks = 0; blinks < 6; blinks++) {
+		BLINK_LED(PIN_LED, 3);
+	}
 }
 
 /*
@@ -266,6 +265,9 @@ void main(void)
 	uint16_t rpmsg_src, rpmsg_dst, len;
 	struct bcam_cmd *cmd = (struct bcam_cmd *) arm_recv_buf;
 
+	struct cap_data pru0_recv_buf;
+	uint32_t expect_seq;
+
 	init_pru_core();
 	init_rpmsg(&transport);
 
@@ -288,16 +290,18 @@ void main(void)
 				switch (cmd->command) {
 				case BCAM_CMD_START:
 					pru_start();
+					pru0_recv_buf.seq = 0;
+					expect_seq = 1;
+
 					send_rpmsg(&transport, rpmsg_dst, rpmsg_src,
 						   "pru started");
-
 					break;
 
 				case BCAM_CMD_STOP:
 					pru_stop();
+
 					send_rpmsg(&transport, rpmsg_dst, rpmsg_src,
 						   "pru stopped");
-
 					break;
 
 				default:
@@ -310,18 +314,31 @@ void main(void)
 
 		switch (run_state) {
 		case SM_STARTED:
-			/*
-			 * XFR registers R5-R10 from PRU0 to PRU1
-			 * 14 is the device_id reserved for PRU-to-PRU transfer.
-			 */
+			/* XFR registers R5-R6 from PRU0 to PRU1 */
 			__xin(14, 5, 0, pru0_recv_buf);
 
-			//TODO: detect timeout - use a seq. no.
+			while (pru0_recv_buf.seq < expect_seq) {
+				__delay_cycles(10);
+				__xin(14, 5, 0, pru0_recv_buf);
+			}
 
 			/*pru_rpmsg_send_optim(&transport, rpmsg_dst, rpmsg_src,
 					     (void*)(&pru0_recv_buf), sizeof(pru0_recv_buf));*/
 			pru_rpmsg_send(&transport, rpmsg_dst, rpmsg_src,
 				       (void*)(&pru0_recv_buf), sizeof(pru0_recv_buf));
+
+			if (pru0_recv_buf.seq > expect_seq) {
+				pru_stop();
+				send_rpmsg(&transport, rpmsg_dst, rpmsg_src,
+					   "recv unexpected seq");
+				break;
+			}
+
+			if (++expect_seq > 10) {
+				pru_stop();
+			} else {
+				__delay_cycles(100);
+			}
 
 			break;
 		}

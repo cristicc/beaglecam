@@ -71,6 +71,9 @@
 };
 
 &am33xx_pinmux {
+	pinctrl-names = "default";
+	pinctrl-0 = <&beaglecam_pins>;
+
 	bb_lcd_pwm_backlight_pins: pinmux_bb_lcd_pwm_backlight_pins {
 		pinctrl-single,pins = <
 			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, 0x0, MUX_MODE4)			/* mcasp0_ahclkr.eCAP2_in_PWM2_out */
@@ -109,6 +112,13 @@
 
 			/* PRU1 output on P8_20 to control a diagnosis LED */
 			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN2, PIN_OUTPUT, MUX_MODE5)
+
+			/*
+			 * Bit 6 of the PRU0 registers 30 & 31 (GPIO3_20) is routed to
+			 * P9_41 (GPIO0_20 / CLKOUT2). To be able to use them it is
+			 * necessary to set GPIO0_20 to input mode.
+			 */
+			AM33XX_PADCONF(AM335X_PIN_XDMA_EVENT_INTR1, PIN_INPUT, MUX_MODE7)
 		>;
 	};
 };
