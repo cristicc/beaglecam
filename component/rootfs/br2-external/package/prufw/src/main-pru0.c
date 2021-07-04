@@ -47,36 +47,72 @@ volatile register uint32_t __R31;
 /* Host-0 interrupt sets bit 30 in register R31 */
 #define HOST_INT			((uint32_t) 1 << 30)
 
+/*
+ * State machine.
+ */
+#define SM_STOPPED			0
+#define SM_STARTED			(SM_STOPPED + 1)
+
 void main(void)
 {
 	struct cap_data buf;
+	uint8_t is_started = 0;
+	uint8_t crt_bank;
+	uint8_t iter;
 
 	/* Clear the status of all interrupts */
 	CT_INTC.SECR0 = 0xFFFFFFFF;
 	CT_INTC.SECR1 = 0xFFFFFFFF;
 
-	/*
-	 * Poll until R31.30 (PRU0 interrupt) is set; this signals
-	 * PRU1 is initialized.
-	 */
-	while ((__R31 & HOST_INT) == 0) {
-	}
+	while (1) {
+		/* Bit R31.30 is set when PRU1 triggered PRU1_PRU0_INTERRUPT */
+		if (__R31 & HOST_INT) {
+			/* Clear the status of the interrupt */
+			CT_INTC.SICR_bit.STS_CLR_IDX = PRU1_PRU0_INTERRUPT;
 
-	for (buf.seq = 1; buf.seq <= 10; buf.seq++) {
-		buf.data = 0xBBBCAA00 + buf.seq;
+			buf.seq = 0;
+			crt_bank = SCRATCH_PAD_BANK_DEV0;
+			is_started = ~is_started;
+		}
+
+		if (is_started == 0)
+			continue;
+
+		buf.seq++;
+		for (iter = 0; iter < sizeof(buf.data); iter += 4) {
+			*(uint32_t*)(buf.data + iter) = buf.seq + iter;
+			__delay_cycles(200);
+		}
+		buf.data[0] = 0xee; buf.data[1] = 0xee; buf.data[2] = 0; buf.data[3] = buf.seq;
+		buf.data[sizeof(buf.data) - 2] = 0xff; buf.data[sizeof(buf.data) - 1] = 0xff;
 
 		/*
-		 * XFR registers R5-R6 from PRU0 to PRU1.
-		 * 14 is the device_id that signifies a PRU to PRU transfer.
+		 * Using switch is a workaround for the __xout() related compiler error:
+		 * error #664: expected an integer constant
 		 */
-		__xout(14, 5, 0, buf);
+		switch (crt_bank) {
+		case SCRATCH_PAD_BANK_DEV0:
+			__xout(SCRATCH_PAD_BANK_DEV0, XFER_DATA_START_REG_NO,
+			       0, buf);
+			break;
+		case SCRATCH_PAD_BANK_DEV1:
+			__xout(SCRATCH_PAD_BANK_DEV1, XFER_DATA_START_REG_NO,
+			       0, buf);
+			break;
+		case SCRATCH_PAD_BANK_DEV2:
+			__xout(SCRATCH_PAD_BANK_DEV2, XFER_DATA_START_REG_NO,
+			       0, buf);
+			break;
+		}
 
-		/*__delay_cycles(40);*/
+		/*
+		 * Trigger interrupt on PRU1, see ARM335x TRM section:
+		 * Event Interface Mapping (R31): PRU System Events
+		 */
+		__R31 = PRU0_PRU1_INTERRUPT + 16;
+
+		/* Move to next scratch bank */
+		crt_bank = (crt_bank == SCRATCH_PAD_BANK_DEV2)
+				? SCRATCH_PAD_BANK_DEV0 : crt_bank + 1;
 	}
-
-	/* Clear the status of the interrupt */
-	CT_INTC.SICR = PRU1_PRU0_INTERRUPT;
-
-	/* Halt the PRU core */
-	__halt();
 }

@@ -9,12 +9,25 @@
 
 /* Data captured from camera module, used in PRU0-to-PRU1 XFER */
 struct cap_data {
-	uint32_t seq;	/* Sequence number for error detection */
-	uint32_t data;	/* LSB contains one byte of pixel data */
+	uint32_t seq;		/* Sequence number for error detection */
+	uint8_t data[32];	/* 8 32-bit registers of data */
 };
+
+/*
+ * Scratch Pad Bank Device IDs for PRU0-to-PRU1 XFER.
+ * There are 3 banks, each having 30 32-bit registers (R29:0).
+ */
+#define SCRATCH_PAD_BANK_DEV0		10
+#define SCRATCH_PAD_BANK_DEV1		11
+#define SCRATCH_PAD_BANK_DEV2		12
+
+/* The register no. from where the captured data starts to be stored on PRU0 */
+#define XFER_DATA_START_REG_NO		8
 
 /* PRU1-to-PRU0 interrupt as defined in the Linux DT */
 #define PRU1_PRU0_INTERRUPT		17
+/* TODO: DT needed? */
+#define PRU0_PRU1_INTERRUPT		20
 
 /*
  * PRU IO helpers

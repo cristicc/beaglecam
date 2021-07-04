@@ -68,7 +68,7 @@ volatile register uint32_t __R31;
  * State machine.
  */
 #define SM_STOPPED			0
-#define SM_STARTED				2
+#define SM_STARTED			1
 
 /*
  * Command sent from ARM to PRU.
@@ -76,7 +76,6 @@ volatile register uint32_t __R31;
 #define BCAM_CMD_MAGIC			0xbeca
 #define BCAM_CMD_START			1
 #define BCAM_CMD_STOP			2
-#define BCAM_CMD_ACK			3
 
 struct bcam_cmd {
 	uint16_t magic;			/* Filter out garbage/corrupted data. */
@@ -84,13 +83,11 @@ struct bcam_cmd {
 };
 
 /* Used to implement pru_rpmsg_send_optim() */
-#define RPMSG_MESSAGE_OPTIMIZED_SIZE	480
+#define RPMSG_MESSAGE_OPTIMIZED_SIZE	464
 
 /*
  * Global variables.
  */
-uint16_t rpmsg_send_optim_counter = 0;
-
 uint8_t run_state = SM_STOPPED;
 uint8_t cur_seq_num = 0;
 uint8_t arm_recv_buf[RPMSG_MESSAGE_SIZE];
@@ -108,6 +105,16 @@ void init_pru_core()
 	 */
 	CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
+	/*
+	 * Writing an index number to the EN_SET_IDX section of the EISR
+	 * register results in enabling of that interrupt.
+	 */
+	CT_INTC.EISR_bit.EN_SET_IDX = PRU0_PRU1_INTERRUPT;
+
+	/* Clear the status of all interrupts */
+	CT_INTC.SECR0 = 0xFFFFFFFF;
+	CT_INTC.SECR1 = 0xFFFFFFFF;
+
 	/* 3 Hz LED blink for 2 seconds */
 	for (blinks = 0; blinks < 6; blinks++) {
 		BLINK_LED(PIN_LED, 3);
@@ -120,12 +127,6 @@ void init_pru_core()
 void init_rpmsg(struct pru_rpmsg_transport *transport)
 {
 	volatile uint8_t *status;
-
-	/*
-	 * Clear the status of the PRU-ICSS system event that the ARM
-	 * will use to 'kick' us.
-	 */
-	CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
 
 	/* Wait for the rpmsgcam driver to be ready for RPMsg communication */
 	status = &resourceTable.rpmsg_vdev.status;
@@ -165,6 +166,8 @@ struct pru_rpmsg_hdr {
  * RPMSG_MESSAGE_OPTIMIZED_SIZE bytes. When that happens, the ARM host is
  * kicked to process the current buffer and a new one will be used for
  * subsequent package(s), restarting the process.
+ *
+ * To force the data transfer, call the function with 'len' set to 0.
  */
 int16_t pru_rpmsg_send_optim(
 	struct pru_rpmsg_transport	*transport,
@@ -177,27 +180,32 @@ int16_t pru_rpmsg_send_optim(
 	static struct pru_rpmsg_hdr	*msg;
 	static uint32_t			msg_len;
 	static int16_t			head;
-	struct pru_virtqueue		*virtqueue;
+	static struct pru_virtqueue	*virtqueue;
+	static uint16_t 		cached_len = 0;
 
-	if (rpmsg_send_optim_counter == 0) {
-		virtqueue = &transport->virtqueue0;
+	if (len != 0) {
+		if (cached_len == 0) {
+			virtqueue = &transport->virtqueue0;
 
-		/* Get an available buffer */
-		head = pru_virtqueue_get_avail_buf(virtqueue, (void **)&msg, &msg_len);
+			/* Get an available buffer */
+			head = pru_virtqueue_get_avail_buf(virtqueue, (void **)&msg, &msg_len);
 
-		if (head < 0)
-			return PRU_RPMSG_NO_BUF_AVAILABLE;
-	}
+			if (head < 0)
+				return PRU_RPMSG_NO_BUF_AVAILABLE;
+		}
 
-	/* Copy local data buffer to the descriptor buffer address */
-	memcpy(msg->data + rpmsg_send_optim_counter, data, len);
-	rpmsg_send_optim_counter += len;
+		/* Copy local data buffer to the descriptor buffer address */
+		memcpy(msg->data + cached_len, data, len);
+		cached_len += len;
 
-	if (rpmsg_send_optim_counter < RPMSG_MESSAGE_OPTIMIZED_SIZE) {
+		if (cached_len < RPMSG_MESSAGE_OPTIMIZED_SIZE) {
+			return PRU_RPMSG_NO_KICK;
+		}
+	} else if (cached_len == 0) {
 		return PRU_RPMSG_NO_KICK;
 	}
 
-	msg->len = rpmsg_send_optim_counter;
+	msg->len = cached_len;
 	msg->dst = dst;
 	msg->src = src;
 	msg->flags = 0;
@@ -210,28 +218,25 @@ int16_t pru_rpmsg_send_optim(
 	/* Kick the ARM host */
 	pru_virtqueue_kick(virtqueue);
 
-	rpmsg_send_optim_counter = 0;
+	cached_len = 0;
 
 	return PRU_RPMSG_SUCCESS;
 }
 
-void pru_start() {
-	run_state = SM_STARTED;
-	WRITE_PIN(PIN_LED, HIGH);
+void start_stop_pru(uint8_t start) {
+	if (start) {
+		run_state = SM_STARTED;
+		WRITE_PIN(PIN_LED, HIGH);
+	} else {
+		run_state = SM_STOPPED;
+		WRITE_PIN(PIN_LED, LOW);
+	}
 
 	/*
 	 * Trigger interrupt on PRU0, see ARM335x TRM section:
 	 * Event Interface Mapping (R31): PRU System Events
 	 */
 	__R31 = PRU1_PRU0_INTERRUPT + 16;
-}
-
-void pru_stop() {
-	run_state = SM_STOPPED;
-	WRITE_PIN(PIN_LED, LOW);
-
-	/* Tell PRU0 to stop */
-	//TODO: stop PRU0
 }
 
 /*
@@ -244,7 +249,7 @@ int send_rpmsg(struct pru_rpmsg_transport *transport,
 	if (pru_rpmsg_send(transport, src, dst, (void*)msg, strlen(msg)) == PRU_RPMSG_SUCCESS)
 		return 0;
 
-	pru_stop();
+	start_stop_pru(0);
 
 	/* Attempt to destory the existing channe.l */
 	pru_rpmsg_channel(RPMSG_NS_DESTROY, transport,
@@ -267,12 +272,13 @@ void main(void)
 
 	struct cap_data pru0_recv_buf;
 	uint32_t expect_seq;
+	uint8_t crt_bank;
 
 	init_pru_core();
 	init_rpmsg(&transport);
 
 	while (1) {
-		/* Check bit 31 of R31 reg to see if the ARM has kicked us */
+		/* Bit R31.31 is set when the ARM has kicked us */
 		if (__R31 & HOST_INT) {
 			/* Clear the event status */
 			CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
@@ -289,16 +295,17 @@ void main(void)
 
 				switch (cmd->command) {
 				case BCAM_CMD_START:
-					pru_start();
-					pru0_recv_buf.seq = 0;
+					start_stop_pru(1);
+
 					expect_seq = 1;
+					crt_bank = SCRATCH_PAD_BANK_DEV0;
 
 					send_rpmsg(&transport, rpmsg_dst, rpmsg_src,
 						   "pru started");
 					break;
 
 				case BCAM_CMD_STOP:
-					pru_stop();
+					start_stop_pru(0);
 
 					send_rpmsg(&transport, rpmsg_dst, rpmsg_src,
 						   "pru stopped");
@@ -312,35 +319,62 @@ void main(void)
 			}
 		}
 
-		switch (run_state) {
-		case SM_STARTED:
-			/* XFR registers R5-R6 from PRU0 to PRU1 */
-			__xin(14, 5, 0, pru0_recv_buf);
+		if (run_state != SM_STARTED)
+			continue;
 
-			while (pru0_recv_buf.seq < expect_seq) {
-				__delay_cycles(10);
-				__xin(14, 5, 0, pru0_recv_buf);
-			}
+		/*
+		 * Check PRU0_PRU1_INTERRUPT generated by PRU0 when captured
+		 * data is ready to be read by PRU1 from one of the banks.
+		 */
+		if ((CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << PRU0_PRU1_INTERRUPT)) == 0)
+			continue;
 
-			/*pru_rpmsg_send_optim(&transport, rpmsg_dst, rpmsg_src,
-					     (void*)(&pru0_recv_buf), sizeof(pru0_recv_buf));*/
-			pru_rpmsg_send(&transport, rpmsg_dst, rpmsg_src,
-				       (void*)(&pru0_recv_buf), sizeof(pru0_recv_buf));
+		/* Clear the status of PRU0_PRU1_INTERRUPT */
+		CT_INTC.SICR_bit.STS_CLR_IDX = PRU0_PRU1_INTERRUPT;
 
-			if (pru0_recv_buf.seq > expect_seq) {
-				pru_stop();
-				send_rpmsg(&transport, rpmsg_dst, rpmsg_src,
-					   "recv unexpected seq");
-				break;
-			}
-
-			if (++expect_seq > 10) {
-				pru_stop();
-			} else {
-				__delay_cycles(100);
-			}
-
+		/*
+		 * Using switch is a workaround for the __xin() related compiler error:
+		 * error #664: expected an integer constant
+		 */
+		switch (crt_bank) {
+		case SCRATCH_PAD_BANK_DEV0:
+			__xin(SCRATCH_PAD_BANK_DEV0, XFER_DATA_START_REG_NO,
+			      0, pru0_recv_buf);
 			break;
+		case SCRATCH_PAD_BANK_DEV1:
+			__xin(SCRATCH_PAD_BANK_DEV1, XFER_DATA_START_REG_NO,
+			      0, pru0_recv_buf);
+			break;
+		case SCRATCH_PAD_BANK_DEV2:
+			__xin(SCRATCH_PAD_BANK_DEV2, XFER_DATA_START_REG_NO,
+			      0, pru0_recv_buf);
+			break;
+		}
+
+		/* Move to next scratch bank */
+		crt_bank = (crt_bank == SCRATCH_PAD_BANK_DEV2)
+				? SCRATCH_PAD_BANK_DEV0 : crt_bank + 1;
+
+		pru_rpmsg_send_optim(&transport, rpmsg_dst, rpmsg_src,
+				     (void*)(&pru0_recv_buf.data), sizeof(pru0_recv_buf.data));
+		/*pru_rpmsg_send(&transport, rpmsg_dst, rpmsg_src,
+			       (void*)(&pru0_recv_buf), sizeof(pru0_recv_buf));*/
+
+		if (pru0_recv_buf.seq > expect_seq) {
+			start_stop_pru(0);
+
+			/* Send out any cached data */
+			pru_rpmsg_send_optim(&transport, rpmsg_dst, rpmsg_src, 0, 0);
+
+			send_rpmsg(&transport, rpmsg_dst, rpmsg_src,
+				   "recv unexpected seq");
+			break;
+		}
+
+		if (++expect_seq > 30) {
+			start_stop_pru(0);
+			/* Send out any cached data */
+			pru_rpmsg_send_optim(&transport, rpmsg_dst, rpmsg_src, 0, 0);
 		}
 	}
 }
