@@ -117,7 +117,7 @@ CONFIG_SHELL := $(SHELL)
 export SHELL CONFIG_SHELL Q KBUILD_VERBOSE
 
 #
-# Differentiate make targets based on the availability of project config.
+# Differentiate make targets based on the availability of $(PRJ_CONFIG) file.
 #
 ifeq ($(PRJ_HAVE_DOT_CONFIG),y)
 
@@ -172,6 +172,7 @@ include $(sort $(wildcard component/*/*.mk))
 
 #
 # Generate project build targets faking a generic package named 'prj'.
+# Direct project deps are set via PRJ_DEPENDENCIES in $(PRJ_CONFIG) file.
 #
 define STRIP_PROJECT_BINARIES
 	@$(call MESSAGE,"Stripping binaries")
@@ -224,7 +225,7 @@ all: prj
 else # $(PRJ_HAVE_DOT_CONFIG)
 
 all:
-	$(error Invalid or missing project configuration; try "make reconfig")
+	$(error Invalid or missing project configuration")
 	@exit 1
 
 endif # $(PRJ_HAVE_DOT_CONFIG)
