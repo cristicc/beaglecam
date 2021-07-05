@@ -44,19 +44,16 @@
 volatile register uint32_t __R30;
 volatile register uint32_t __R31;
 
-/* Host-0 interrupt sets bit 30 in register R31 */
-#define HOST_INT			((uint32_t) 1 << 30)
+/* Shared memory used for inter-PRU communication */
+volatile struct shared_mem *smem = (struct shared_mem *)SHARED_MEM_ADDR;
 
-/*
- * State machine.
- */
-#define SM_STOPPED			0
-#define SM_STARTED			(SM_STOPPED + 1)
+/* Host-0 interrupt sets bit 30 in register R31 */
+#define HOST_INT			((uint32_t)1 << 30)
 
 void main(void)
 {
 	struct cap_data buf;
-	uint8_t is_started = 0;
+	uint8_t capture_started = 0;
 	uint8_t crt_bank;
 	uint8_t iter;
 
@@ -70,12 +67,17 @@ void main(void)
 			/* Clear the status of the interrupt */
 			CT_INTC.SICR_bit.STS_CLR_IDX = PRU1_PRU0_INTERRUPT;
 
-			buf.seq = 0;
-			crt_bank = SCRATCH_PAD_BANK_DEV0;
-			is_started = ~is_started;
+			smem->pru1_cmd.command = PRU_CMD_ACK;
+			if (smem->pru0_cmd.command == PRU_CMD_START_CAPTURE) {
+				buf.seq = 0;
+				crt_bank = 0;
+				capture_started = 1;
+			} else {
+				capture_started = 0;
+			}
 		}
 
-		if (is_started == 0)
+		if (capture_started == 0)
 			continue;
 
 		buf.seq++;
@@ -87,21 +89,18 @@ void main(void)
 		buf.data[sizeof(buf.data) - 2] = 0xff; buf.data[sizeof(buf.data) - 1] = 0xff;
 
 		/*
-		 * Using switch is a workaround for the __xout() related compiler error:
-		 * error #664: expected an integer constant
+		 * Store captured data in the current scratch pad bank. Note the
+		 * switch is necessary for "error #664: expected an integer constant".
 		 */
 		switch (crt_bank) {
-		case SCRATCH_PAD_BANK_DEV0:
-			__xout(SCRATCH_PAD_BANK_DEV0, XFER_DATA_START_REG_NO,
-			       0, buf);
+		case 0:
+			STORE_DATA(0, buf);
 			break;
-		case SCRATCH_PAD_BANK_DEV1:
-			__xout(SCRATCH_PAD_BANK_DEV1, XFER_DATA_START_REG_NO,
-			       0, buf);
+		case 1:
+			STORE_DATA(1, buf);
 			break;
-		case SCRATCH_PAD_BANK_DEV2:
-			__xout(SCRATCH_PAD_BANK_DEV2, XFER_DATA_START_REG_NO,
-			       0, buf);
+		case 2:
+			STORE_DATA(2, buf);
 			break;
 		}
 
@@ -112,7 +111,6 @@ void main(void)
 		__R31 = PRU0_PRU1_INTERRUPT + 16;
 
 		/* Move to next scratch bank */
-		crt_bank = (crt_bank == SCRATCH_PAD_BANK_DEV2)
-				? SCRATCH_PAD_BANK_DEV0 : crt_bank + 1;
+		NEXT_BANK(crt_bank);
 	}
 }
