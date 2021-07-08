@@ -17,16 +17,6 @@
 #include <linux/module.h>
 #include <linux/rpmsg.h>
 
-#define BCAM_CMD_MAGIC			0xbeca
-#define BCAM_CMD_START			1
-#define BCAM_CMD_STOP			2
-#define BCAM_CMD_ACK			3
-
-struct bcam_cmd {
-	uint16_t magic;			/* For filtering out garbage */
-	uint16_t command;
-};
-
 #define PRU_MAX_DEVICES			8
 
 /* Max size of the buffer (see MAX_RPMSG_BUF_SIZE in virtio_rpmsg_bus.c) */
@@ -196,10 +186,8 @@ static int rpmsgcam_cb(struct rpmsg_device *rpdev,
 	struct rpmsgcam_priv *priv = dev_get_drvdata(&rpdev->dev);
 	u32 length;
 
-	dev_dbg(&rpdev->dev, "incoming msg (src: 0x%x)\n", src);
-	print_hex_dump_debug(__func__, DUMP_PREFIX_NONE, 16, 1, data, len, true);
-
-	//TODO: add message type to differentiate capture data from debug info
+	dev_dbg(&rpdev->dev, "incoming msg (len: %d, src: 0x%x)\n", len, src);
+	print_hex_dump_debug("rpmsgcam data: ", DUMP_PREFIX_NONE, 16, 1, data, len, true);
 
 	if (kfifo_avail(&priv->msg_fifo) < len) {
 		dev_err(&rpdev->dev, "Not enough space on the FIFO\n");
@@ -278,11 +266,10 @@ static int rpmsgcam_probe(struct rpmsg_device *rpdev)
 
 	dev_info(&rpdev->dev, "new rpmsg_pru device: /dev/rpmsgcam%d", rpdev->dst);
 
-	//TODO: module param to autostart camera capture
-	if (1) {
-		struct bcam_cmd start_cmd = { BCAM_CMD_MAGIC, BCAM_CMD_START };
-
-		ret = rpmsg_send(rpdev->ept, &start_cmd, sizeof(start_cmd));
+	/* TODO: module param to autostart camera capture */
+	if (0) {
+		uint8_t start_cmd[4] = { 0xbe, 0xca, 0x2, 0x0 };
+		ret = rpmsg_send(rpdev->ept, start_cmd, sizeof(start_cmd));
 		if (ret) {
 			dev_err(&rpdev->dev, "rpmsg_send failed: %d\n", ret);
 			return ret;
