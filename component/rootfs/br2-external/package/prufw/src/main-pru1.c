@@ -30,6 +30,7 @@
 #include <pru_intc.h>
 #include <pru_rpmsg.h>
 
+#include "bcam-rpmsg-api.h"
 #include "pru-comm.h"
 #include "resource_table_1.h"
 
@@ -63,82 +64,6 @@ volatile struct shared_mem *smem = (struct shared_mem *)SHARED_MEM_ADDR;
 #define PIN_LED				13 /* P8_20 */
 
 /*
- * State machine.
- */
-#define SM_CAPTURE_STOPPED		0
-#define SM_CAPTURE_STARTED		1
-
-/*
- * Commands sent from ARM to PRU1.
- */
-#define BCAM_CMD_MAGIC			0xbeca
-
-/* Commands sent from ARM to PRU1. */
-enum bcam_cmd_id {
-	BCAM_CMD_GET_PRUFW_VER = 0,	/* Get PRU firmware version */
-	BCAM_CMD_GET_CAP_STATUS,	/* Get camera capture status */
-	BCAM_CMD_CAP_START,		/* Start camera data capture */
-	BCAM_CMD_CAP_STOP,		/* Stop camera data capture */
-};
-
-struct bcam_cmd {
-	uint8_t magic[2];		/* The magic byte sequence */
-	uint8_t id;			/* Member of enum bcam_cmd_id */
-	uint8_t arg;			/* Optional command argument */
-};
-
-/* Type of messages sent from PRU1 to ARM. */
-enum bcam_msg_type {
-	BCAM_MSG_NONE = 0,		/* Null data */
-	BCAM_MSG_INFO,			/* BCAM_CMD_GET_* requested info */
-	BCAM_MSG_CAP,			/* Capture data */
-	BCAM_MSG_LOG,			/* Log entry */
-};
-
-/* Frame section. */
-enum bcam_frm_sect {
-	BCAM_FRM_NONE = 0,		/* Null frame */
-	BCAM_FRM_START,			/* Frame start */
-	BCAM_FRM_BODY,			/* Frame body */
-	BCAM_FRM_END,			/* Frame end */
-	BCAM_FRM_INVALID,		/* Frame invalid, should be discarded */
-};
-
-/* Log levels. */
-enum bcam_log_level {
-	BCAM_LOG_FATAL = 0,
-	BCAM_LOG_ERROR,
-	BCAM_LOG_WARN,
-	BCAM_LOG_INFO,
-	BCAM_LOG_DEBUG,
-};
-
-/* Message header. */
-struct bcam_msg_hdr {
-	uint8_t type;				/* Member of enum bcam_msg_type */
-
-	union {
-		/* BCAM_MSG_INFO type */
-		struct {
-			uint8_t data[0];	/* Command response */
-		} info_hdr;
-
-		/* BCAM_MSG_CAP type */
-		struct {
-			uint8_t frm;		/* Member of enum bcam_frm_sect */
-			uint16_t seq;		/* Data sequence no. */
-			uint8_t data[0];	/* Captured image data */
-		} cap_hdr;
-
-		/* BCAM_MSG_LOG type */
-		struct {
-			uint8_t level;		/* Member of enum bcam_log_level */
-			uint8_t data[0];	/* Log msg */
-		} log_hdr;
-	};
-};
-
-/*
  * Standard structure copied from pru_rpmsg.c.
  * Currently used to implement pru_rpmsg_send_optim().
  */
@@ -156,7 +81,7 @@ struct pru_rpmsg_hdr {
  */
 uint8_t arm_recv_buf[RPMSG_MESSAGE_SIZE];
 uint8_t arm_send_buf[RPMSG_MESSAGE_SIZE];
-uint8_t run_state = SM_CAPTURE_STOPPED;
+enum bcam_cap_status run_state = BCAM_CAP_STOPPED;
 
 /*
  * Utility to start/stop data capture on PRU0.
@@ -189,11 +114,11 @@ void start_stop_capture(uint8_t start) {
 		CT_INTC.EISR_bit.EN_SET_IDX = PRU0_PRU1_INTERRUPT;
 
 		WRITE_PIN(PIN_LED, HIGH);
-		run_state = SM_CAPTURE_STARTED;
+		run_state = BCAM_CAP_STARTED;
 
 	} else {
 		WRITE_PIN(PIN_LED, LOW);
-		run_state = SM_CAPTURE_STOPPED;
+		run_state = BCAM_CAP_STOPPED;
 	}
 }
 
@@ -256,26 +181,26 @@ void init_rpmsg(struct pru_rpmsg_transport *transport, uint8_t reinit)
 }
 
 /*
- * Sends info messages to ARM as requested via BCAM_CMD_GET_* commands.
+ * Sends info messages to ARM as requested via BCAM_ARM_MSG_GET_* commands.
  */
 int16_t rpmsg_send_info(struct pru_rpmsg_transport *transport, uint32_t src,
-			uint32_t dst, struct bcam_cmd *req_info_cmd)
+			uint32_t dst, struct bcam_arm_msg *req_info_cmd)
 {
-	struct bcam_msg_hdr *msg = (struct bcam_msg_hdr *)arm_send_buf;
+	struct bcam_pru_msg *msg = (struct bcam_pru_msg *)arm_send_buf;
 	const char *fw_ver = PRU_FW_VERSION;
 	uint8_t *data_buf;
 
-	msg->type = BCAM_MSG_INFO;
+	msg->type = BCAM_PRU_MSG_INFO;
 	data_buf = msg->info_hdr.data;
 
 	switch (req_info_cmd->id) {
-	case BCAM_CMD_GET_PRUFW_VER:
+	case BCAM_ARM_MSG_GET_PRUFW_VER:
 		while (*fw_ver != 0)
 			*data_buf++ = *fw_ver++;
 		*data_buf++ = 0;
 		break;
 
-	case BCAM_CMD_GET_CAP_STATUS:
+	case BCAM_ARM_MSG_GET_CAP_STATUS:
 		*data_buf++ = run_state;
 		break;
 
@@ -291,12 +216,12 @@ int16_t rpmsg_send_info(struct pru_rpmsg_transport *transport, uint32_t src,
  * Sends a log message to ARM.
  */
 int16_t rpmsg_send_log(struct pru_rpmsg_transport *transport, uint32_t src,
-		       uint32_t dst, enum bcam_log_level level, const char *str)
+		       uint32_t dst, enum bcam_pru_log_level level, const char *str)
 {
-	struct bcam_msg_hdr *msg = (struct bcam_msg_hdr *)arm_send_buf;
+	struct bcam_pru_msg *msg = (struct bcam_pru_msg *)arm_send_buf;
 	uint8_t *data_buf;
 
-	msg->type = BCAM_MSG_LOG;
+	msg->type = BCAM_PRU_MSG_LOG;
 	msg->log_hdr.level = level;
 	data_buf = msg->log_hdr.data;
 
@@ -335,7 +260,7 @@ int16_t rpmsg_send_cap(
 
 	/* Transfer optimization data */
 	static uint16_t			cached_len = 0;
-	struct bcam_msg_hdr		*bmsg;
+	struct bcam_pru_msg		*bmsg;
 	uint16_t			bseq;
 	int16_t				ret;
 
@@ -344,7 +269,7 @@ int16_t rpmsg_send_cap(
 		bseq = 0;
 
 		if (cached_len > 0) {
-			bmsg = (struct bcam_msg_hdr *)msg->data;
+			bmsg = (struct bcam_pru_msg *)msg->data;
 			/* Increment last sequence if frm section didn't change */
 			if (cap->seq == bmsg->cap_hdr.frm)
 				bseq = bmsg->cap_hdr.seq + 1;
@@ -369,8 +294,8 @@ int16_t rpmsg_send_cap(
 				return PRU_RPMSG_NO_BUF_AVAILABLE;
 
 			/* Setup new bmsg header */
-			bmsg = (struct bcam_msg_hdr *)msg->data;
-			bmsg->type = BCAM_MSG_CAP;
+			bmsg = (struct bcam_pru_msg *)msg->data;
+			bmsg->type = BCAM_PRU_MSG_CAP;
 			bmsg->cap_hdr.frm = cap->seq;
 			bmsg->cap_hdr.seq = bseq;
 
@@ -411,7 +336,7 @@ void main(void)
 	struct pru_rpmsg_transport transport;
 	uint16_t rpmsg_src, rpmsg_dst;
 
-	struct bcam_cmd *arm_cmd = (struct bcam_cmd *)arm_recv_buf;
+	struct bcam_arm_msg *arm_cmd = (struct bcam_arm_msg *)arm_recv_buf;
 	uint16_t arm_cmd_len;
 
 	struct cap_data capture_buf;
@@ -436,43 +361,43 @@ void main(void)
 			while (pru_rpmsg_receive(&transport, &rpmsg_src, &rpmsg_dst,
 						 arm_recv_buf, &arm_cmd_len) == PRU_RPMSG_SUCCESS) {
 				if (arm_cmd_len < sizeof(*arm_cmd) || (arm_cmd->magic[0] << 8
-							| arm_cmd->magic[1]) != BCAM_CMD_MAGIC) {
+						| arm_cmd->magic[1]) != BCAM_ARM_MSG_MAGIC) {
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_LOG_DEBUG, "malformed cmd");
+						       BCAM_PRU_LOG_DEBUG, "malformed cmd");
 					continue;
 				}
 
 				switch (arm_cmd->id) {
-				case BCAM_CMD_GET_PRUFW_VER:
-				case BCAM_CMD_GET_CAP_STATUS:
+				case BCAM_ARM_MSG_GET_PRUFW_VER:
+				case BCAM_ARM_MSG_GET_CAP_STATUS:
 					rpmsg_send_info(&transport, rpmsg_dst, rpmsg_src, arm_cmd);
 					break;
 
-				case BCAM_CMD_CAP_START:
+				case BCAM_ARM_MSG_CAP_START:
 					start_stop_capture(1);
 
 					crt_bank = 0;
 					exp_cap_seq = 1;
 
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_LOG_INFO, "capture started");
+						       BCAM_PRU_LOG_INFO, "capture started");
 					break;
 
-				case BCAM_CMD_CAP_STOP:
+				case BCAM_ARM_MSG_CAP_STOP:
 					start_stop_capture(0);
 
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_LOG_INFO, "capture stopped");
+						       BCAM_PRU_LOG_INFO, "capture stopped");
 					break;
 
 				default:
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_LOG_WARN, "unknown cmd");
+						       BCAM_PRU_LOG_WARN, "unknown cmd");
 				}
 			}
 		}
 
-		if (run_state != SM_CAPTURE_STARTED)
+		if (run_state != BCAM_CAP_STARTED)
 			continue;
 
 		/*
@@ -511,7 +436,7 @@ void main(void)
 			capture_buf.seq = BCAM_FRM_INVALID;
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
 
-			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_LOG_ERROR,
+			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_ERROR,
 				       "unexpected cap seq");
 			continue;
 		}
@@ -523,7 +448,7 @@ void main(void)
 			capture_buf.seq = BCAM_FRM_END;
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
 
-			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_LOG_INFO,
+			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_INFO,
 				       "limit reached, capture stopped");
 		} else {
 			/* Optimized capture data transfer */
