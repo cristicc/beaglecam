@@ -60,7 +60,7 @@ $(TARGET1_TEST): $(OBJECTS1_TEST) $(LINKER_COMMAND_FILE)
 	$(PRU_CGT)/bin/clpru $(CFLAGS) -z -i$(PRU_CGT)/lib -i$(PRU_CGT)/include $(LFLAGS) -o $(TARGET1_TEST) $(OBJECTS1_TEST) -m$(MAP1_TEST) $(LINKER_COMMAND_FILE) --library=libc.a $(LIBS)
 
 # Invokes the compiler on all c files in the directory to create the object files
-$(GEN_DIR)/%.object: %.c
+$(GEN_DIR)/%.object: %.c $(wildcard *.h)
 	@mkdir -p $(GEN_DIR)
 	$(PRU_CGT)/bin/clpru --include_path=$(PRU_CGT)/include $(INCLUDE) $(CFLAGS) -fe $@ $<
 
