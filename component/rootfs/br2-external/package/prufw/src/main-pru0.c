@@ -1,13 +1,13 @@
 /*
  * BeagleCam firmware for PRU0.
  *
- * Reads raw data from the camera module and stores it in a circular buffer
- * placed in the 12 KB shared memory.
+ * Reads raw data from the camera module and transfered it to PRU1 via the 3
+ * scratch pad banks.
  *
- * Although the camera supports 1 Mpixel frames, we are going to capture at the
- * lowest resolution QQVGA (160 x 120 pixels) for the moment. Each pixel is in
- * RGB 565 format, which means that 16 bits (2 bytes) are used per pixel. Hence,
- * each fame requires 38400 bytes, still much more than the available memory.
+ * Although the camera supports 1 Mpixel frames, for the moment we are capturing
+ * at the lowest resolution QQVGA (160 x 120 pixels). Each pixel is in RGB 565
+ * format, which means that 16 bits (2 bytes) are used per pixel. Hence, each
+ * frame requires 38400 bytes.
  *
  * The start of each frame is signalled by VSYNC going low while the first line
  * of data appears when HREF goes high. Since from PRU0 we can only access data
@@ -20,15 +20,10 @@
  * OV7670 datasheet). After the last line in a frame (i.e. 120th line) there is
  * ~900 usec delay until VSYNC goes high to indicate the frame is complete.
  *
- * PRU0 starts waiting for a flag in the shared memory buffer to be set by PRU1
- * indicating that PRU0 should proceed reading data from the camera module. The
- * data will be written at the beginning of the circular buffer. While PRU1 is
- * reading the buffer, the start of the buffer is eventually overwritten with
- * the data corresponding to the end of the frame. To ensure a reliable data
- * transfer, PRU0 maintains a counter that is incremented for each frame line
- * that was captured from the camera. This information is written back to the
- * circular buffer, just before the line data, so that PRU1 receives packages
- * of size 321 bytes (1 byte hdr + 160 pixels/line * 2 bytes/pixel).
+ * PRU0 starts waiting for a command in the shared memory buffer to be set by
+ * PRU1 indicating that PRU0 should proceed reading data from the camera module.
+ * To ensure a reliable data transfer, PRU0 maintains a sequence counter that
+ * is incremented before each data transfer.
  *
  * Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
@@ -50,6 +45,33 @@ volatile struct shared_mem *smem = (struct shared_mem *)SHARED_MEM_ADDR;
 /* Host-0 interrupt sets bit 30 in register R31 */
 #define HOST_INT			((uint32_t)1 << 30)
 
+/*
+ * Checks for commands from PRU1.
+ * Returns the received command ID.
+ */
+uint8_t check_pru1_cmd() {
+	uint8_t id;
+
+	/* Bit R31.30 is set when PRU1 triggered PRU1_PRU0_INTERRUPT */
+	if (__R31 & HOST_INT == 0)
+		return PRU_CMD_NONE;
+
+	/* Clear the status of the interrupt */
+	CT_INTC.SICR_bit.STS_CLR_IDX = PRU1_PRU0_INTERRUPT;
+
+	/* Get command ID and clear smem */
+	id = smem->pru0_cmd.id;
+	smem->pru0_cmd.id = PRU_CMD_NONE;
+
+	/* Acknoledge command on PRU1 */
+	smem->pru1_cmd.id = PRU_CMD_ACK;
+
+	return id;
+}
+
+/*
+ * Main loop.
+ */
 void main(void)
 {
 	struct cap_data buf;
@@ -61,32 +83,41 @@ void main(void)
 	CT_INTC.SECR0 = 0xFFFFFFFF;
 	CT_INTC.SECR1 = 0xFFFFFFFF;
 
-	while (1) {
-		/* Bit R31.30 is set when PRU1 triggered PRU1_PRU0_INTERRUPT */
-		if (__R31 & HOST_INT) {
-			/* Clear the status of the interrupt */
-			CT_INTC.SICR_bit.STS_CLR_IDX = PRU1_PRU0_INTERRUPT;
+	buf.pad = 0;
 
-			smem->pru1_cmd.command = PRU_CMD_ACK;
-			if (smem->pru0_cmd.command == PRU_CMD_START_CAPTURE) {
-				buf.seq = 0;
-				crt_bank = 0;
-				capture_started = 1;
-			} else {
-				capture_started = 0;
-			}
+	while (1) {
+		/* Process command from PRU1 */
+		switch (check_pru1_cmd()) {
+		case PRU_CMD_CAP_START:
+			buf.seq = 0;
+			crt_bank = 0;
+			capture_started = 1;
+			break;
+		case PRU_CMD_CAP_STOP:
+			capture_started = 0;
+			break;
 		}
 
 		if (capture_started == 0)
 			continue;
 
+		/* Test only */
 		buf.seq++;
-		for (iter = 0; iter < sizeof(buf.data); iter += 4) {
-			*(uint32_t*)(buf.data + iter) = buf.seq + iter;
+		iter = 0;
+		while (iter < sizeof(buf.data)) {
+			buf.data[iter] = ((iter & 1) ? 0xab : 0xef);
+			iter++;
+
 			__delay_cycles(200);
+
+			/* Process command from PRU1 */
+			if (check_pru1_cmd() == PRU_CMD_CAP_STOP) {
+				capture_started = 0;
+				break;
+			}
 		}
-		buf.data[0] = 0xee; buf.data[1] = 0xee; buf.data[2] = 0; buf.data[3] = buf.seq;
-		buf.data[sizeof(buf.data) - 2] = 0xff; buf.data[sizeof(buf.data) - 1] = 0xff;
+		*(uint16_t *)buf.data = buf.seq;
+		buf.len = iter;
 
 		/*
 		 * Store captured data in the current scratch pad bank. Note the
