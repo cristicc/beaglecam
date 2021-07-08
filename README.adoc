@@ -585,7 +585,7 @@ root@beaglecam:~# echo stop > /sys/class/remoteproc/remoteproc1/state
 === Update PRU firmware and RPMSG camera driver
 
 The main PRU firmware sources are `component/rootfs/br2-external/package/prufw/src/main-pru{0,1}.c`
-while the related kernel module is `component/rpmsgcam/rpmsg_cam.c`. The corresponding
+while the related kernel module is `component/rpmsgcam-drv/src/rpmsg_cam.c`. The corresponding
 binaries can be quickly rebuild, redeployed and tested by using the commands below:
 
 [source,sh]
@@ -594,7 +594,7 @@ binaries can be quickly rebuild, redeployed and tested by using the commands bel
 $ make rootfs-stg-prufw-rebuild
 
 # Rebuild out-of-tree kernel driver
-$ make rpmsgcam-rebuild
+$ make rpmsgcam-drv-rebuild
 
 # Regenerate rootfs image
 $ make rootfs-rebuild
@@ -604,19 +604,35 @@ $ tools/ssh-cmd.sh -t 10.0.1.100 -u rootfs,kernel
 
 # After device rebooted, load the required modules and start the PRU cores
 $ tools/ssh-cmd.sh -t 10.0.1.100 'prefix=/sys/class/remoteproc/remoteproc; modprobe -a virtio_rpmsg_bus pru_rproc rpmsg_cam; echo start >${prefix}0/state; echo start >${prefix}1/state;'
+
+# Verify PRU firmware version (see kernel log for command response)
+$ tools/ssh-cmd.sh -t 10.0.1.100 'printf "%b" "\xbe\xca\x00" >/dev/rpmsgcam31'
+
+# Trigger data capture by sending the START cmd, followed by STOP
+$ tools/ssh-cmd.sh -t 10.0.1.100 'printf "%b" "\xbe\xca\x02" >/dev/rpmsgcam31; sleep 5; printf "%b" "\xbe\xca\x03" >/dev/rpmsgcam31'
+
+# View captured data on device terminal
+root@beaglecam:~# cat /dev/rpmsgcam31 | hexdump -C
 ----
 
-It is also possible to further test updated PRU firmware without rebuilding
-the rootfs and rebooting the device:
+To speed up the development process, it is possible to test the PRU firmware
+and/or the kernel driver without rebuilding the rootfs and rebooting the device:
 
 [source,sh,subs="attributes+"]
 ----
-# Copy the firmware files to device (note this is not persisted to disk!)
-$ scp {DEV_OUTPUT_DIR}/build/rootfs/target/lib/firmware/* root@10.0.1.100:/lib/firmware/
+# Transfer and reload the kernel module
+$ scp {DEV_OUTPUT_DIR}/build/rpmsgcam-drv/rpmsg_cam.ko root@10.0.1.100:/lib/modules/5.*/extra/
+$ tools/ssh-cmd.sh -t 10.0.1.100 'modprobe -r rpmsg_cam; modprobe -a virtio_rpmsg_bus pru_rproc rpmsg_cam'
 
-# Restart PRU cores to use the updated firmware files
+# Transfer the PRU firmware files to device and restart PRU cores
+$ scp {DEV_OUTPUT_DIR}/build/rootfs/target/lib/firmware/* root@10.0.1.100:/lib/firmware/
 $ tools/ssh-cmd.sh -t 10.0.1.100 'prefix=/sys/class/remoteproc/remoteproc; echo stop >${prefix}0/state; echo start >${prefix}0/state; echo stop >${prefix}1/state; echo start >${prefix}1/state'
 ----
+
+[WARNING]
+The content of the files copied via `scp` command above is not written to media
+storage, therefore it is necessary to run all the steps again whenever the device
+is rebooted.
 
 
 [#enable-falcon]
