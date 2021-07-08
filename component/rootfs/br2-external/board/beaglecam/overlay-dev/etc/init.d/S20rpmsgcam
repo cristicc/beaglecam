@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# Setup PRUSS kernel framework and load RPMsg camera driver.
+#
+
+KERN_MODULES="virtio_rpmsg_bus pru_rproc rpmsg_cam"
+RPROC_SYS_PREFIX=/sys/class/remoteproc/remoteproc
+
+# Usage: setup_rproc {start|stop}
+setup_rproc() {
+    local index
+    for index in 0 1; do
+        [ -d ${RPROC_SYS_PREFIX}${index} ] && echo $1 >${RPROC_SYS_PREFIX}${index}/state
+    done
+}
+
+start() {
+    modprobe -a ${KERN_MODULES}
+    setup_rproc start
+}
+
+stop() {
+    setup_rproc stop
+    modprobe -r ${KERN_MODULES}
+}
+
+case "$1" in
+start)
+    start
+    ;;
+
+restart|reload)
+    stop
+    start
+    ;;
+
+stop)
+    stop
+    ;;
+
+*)
+    printf "Usage: %s {start|stop|restart|reload}\n" "$0"
+    exit 1
+esac
