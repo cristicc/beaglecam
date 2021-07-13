@@ -224,4 +224,16 @@ EXTRA_ENV = \
 	BUILD_DIR=$(BUILD_DIR) \
 	O=$(OUTPUT_DIR)
 
+ifeq ($(PRJ_SHARED_STATIC_LIBS),static)
+SHARED_STATIC_LIBS_OPTS = --enable-static --disable-shared
+TARGET_CFLAGS += -static
+TARGET_CXXFLAGS += -static
+TARGET_FCFLAGS += -static
+TARGET_LDFLAGS += -static
+else ifeq ($(PRJ_SHARED_STATIC_LIBS),shared)
+SHARED_STATIC_LIBS_OPTS = --disable-static --enable-shared
+else ifeq ($(BR2_SHARED_STATIC_LIBS),both)
+SHARED_STATIC_LIBS_OPTS = --enable-static --enable-shared
+endif
+
 SHARED_STATIC_LIBS_OPTS = $(call qstrip,$(PRJ_SHARED_STATIC_LIBS_OPTS))
