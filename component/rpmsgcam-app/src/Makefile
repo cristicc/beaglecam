@@ -9,7 +9,7 @@ SOURCES = fb.c i2cfunc.c log.c main.c ov7670-ctrl.c rpmsg-cam.c
 LIBS = -pthread
 
 ALL_CPPFLAGS = -I $(INCLUDE_DIR) $(CPPFLAGS)
-CFLAGS = -g -DLOG_USE_COLOR=1 -Wall
+ALL_CFLAGS = -g -DLOG_USE_COLOR=1 -Wall $(CFLAGS)
 
 SED := $(shell which sed || type -p sed)
 
@@ -18,7 +18,7 @@ SED := $(shell which sed || type -p sed)
 all: $(PROJECT)
 
 $(PROJECT): $(SOURCES:%.c=%.o)
-	$(CC) $(LIBS) $^ -o $@
+	$(CC) $(LDFLAGS) $(LIBS) $^ -o $@
 
 clean:
 	rm *.o *.d $(PROJECT)
@@ -27,7 +27,7 @@ clean:
 .SUFFIXES: .c .d .o
 
 %.o: %.c
-	$(CC) -c $(ALL_CPPFLAGS) $(CFLAGS) $< -o $@
+	$(CC) -c $(ALL_CPPFLAGS) $(ALL_CFLAGS) $< -o $@
 
 %.d: %.c
 	$(SHELL) -ec "$(CC) -M $(ALL_CPPFLAGS) $< | $(SED) 's/$*\\.o[ :]*/$@ &/g' > $@"
