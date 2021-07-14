@@ -51,8 +51,7 @@ rpmsg_cam_handle_t rpmsg_cam_start(const char *rpmsg_dev_path)
 
 	h->rpmsg_fd = open(rpmsg_dev_path, O_RDWR);
 	if (h->rpmsg_fd < 0) {
-		log_error("Failed to open PRU device '%s': %s",
-				  rpmsg_dev_path, strerror(errno));
+		log_error("Failed to open %s: %s", rpmsg_dev_path, strerror(errno));
 		goto fail_open;
 	}
 
@@ -148,7 +147,7 @@ static int rpmsg_cam_read_msg(struct rpmsg_cam_handle *h, int exp_seq,
 	case BCAM_PRU_MSG_LOG:
 		*len -= msg->log_hdr.data - h->rpmsg_buf;
 		*data = msg->log_hdr.data;
-		log_log2(msg->log_hdr.level, "PRU: %.*s", *len, *data);
+		log_write(msg->log_hdr.level, "PRU", 1, "%.*s", *len, *data);
 		return 0;
 
 	case BCAM_PRU_MSG_CAP:

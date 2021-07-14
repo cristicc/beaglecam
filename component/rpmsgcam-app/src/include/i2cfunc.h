@@ -8,12 +8,12 @@
 /**
  * Gets an I2C file descriptor.
  *
- * @bus: I2C bus index (e.g. 1 for I2C2 on BeagleBone Black)
- * @addr: 7-bit address (e.g. 0x77 for 0xEE in datasheet - right-shift by 1)
+ * @dev_path: I2C device path
+ * @addr: 7-bit address (8-bit address in data-sheet right-shifted by 1)
  *
  * Return: file descriptor to be used all functions below.
  */
-int i2c_open(unsigned char bus, unsigned char addr);
+int i2c_open(const char *dev_path, unsigned char addr);
 
 /*
  * These functions return -1 on error, otherwise return the number of bytes

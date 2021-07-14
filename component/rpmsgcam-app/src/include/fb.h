@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-int init_fb(char* fb_path);
-void update_fb(uint8_t* pixbuf);
+int init_fb(const char *dev_path);
+void write_fb(uint8_t *pixels);
 
 #endif /* _FB_H */

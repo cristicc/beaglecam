@@ -7,6 +7,6 @@
 #ifndef _OV7670_H
 #define _OV7670_H
 
-int cam_init(unsigned char bus);
+int cam_init(const char *i2c_dev);
 
 #endif /* _OV7670_H */

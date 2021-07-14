@@ -20,21 +20,16 @@
 
 //TODO: drop fprintf statements and return error codes instead
 
-int i2c_open(unsigned char bus, unsigned char addr)
+int i2c_open(const char *dev_path, unsigned char addr)
 {
-	int fd;
-	char filename[16];
-
-	sprintf(filename, "/dev/i2c-%d", bus);
-	fd = open(filename, O_RDWR);
-
+	int fd = open(dev_path, O_RDWR);
 	if (fd < 0) {
-		fprintf(stderr, "Failed to open %s: %s\n", filename, strerror(errno));
+		fprintf(stderr, "Failed to open %s: %s\n", dev_path, strerror(errno));
 		return fd;
 	}
 
 	if (ioctl(fd, I2C_SLAVE, addr) < 0) {
-		fprintf(stderr, "Failed to ioctrl %s: %s\n", filename, strerror(errno));
+		fprintf(stderr, "ioctl failed for %s: %s\n", dev_path, strerror(errno));
 		return -1;
 	}
 

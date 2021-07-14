@@ -11,7 +11,7 @@
 #include "ov7670-regs.h"
 
 /* I2C handler */
-static unsigned char cam_bus_no;
+static const char *cam_dev;
 static unsigned char cam_addr;
 static int cam_fd;
 
@@ -29,7 +29,7 @@ static unsigned char cam_reg_read(unsigned char reg)
 
 	/* TODO: do we really need closing and reopening fd? */
 	i2c_close(cam_fd);
-	cam_fd = i2c_open(cam_bus_no, cam_addr);
+	cam_fd = i2c_open(cam_dev, cam_addr);
 
 	ret = i2c_read_no_ack(cam_fd, cam_addr, buf, 1);
 
@@ -57,15 +57,15 @@ static void cam_id_dump(void)
 	printf("PID: 0x%02x\n", val);
 }
 
-int cam_init(unsigned char bus)
+int cam_init(const char *i2c_dev)
 {
 	/*int i = 0;*/
 	unsigned char pair[2];
 
-	cam_bus_no = bus;
+	cam_dev = i2c_dev;
 	cam_addr = (OV7670_I2C_ADDR >> 1);
 
-	cam_fd = i2c_open(cam_bus_no, cam_addr);
+	cam_fd = i2c_open(cam_dev, cam_addr);
 	if (cam_fd < 0)
 		return cam_fd;
 
