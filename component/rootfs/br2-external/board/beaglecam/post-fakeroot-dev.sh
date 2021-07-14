@@ -4,7 +4,8 @@ TARGET_DIR=$1
 
 cd ${TARGET_DIR}
 
-cp -dR --preserve=mode,timestamps ${PRJ_BINARIES_DIR}/lib .
+cp -dR --preserve=mode,timestamps \
+    ${PRJ_BINARIES_DIR}/lib ${PRJ_BINARIES_DIR}/usr .
 
 sed -i "s|@OS_VER@|${PRJ_VERSION}|" \
     usr/lib/os-release \
