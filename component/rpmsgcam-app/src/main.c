@@ -25,7 +25,15 @@
 #include "ov7670-ctrl.h"
 #include "rpmsg-cam.h"
 
-/* Default device paths */
+/* Standard string conversion macros */
+#define STR_HELPER(x)		#x
+#define STR(x)				STR_HELPER(x)
+
+/* Default camera resolution (QQVGA) */
+#define DEFAULT_CAM_XRES	160
+#define DEFAULT_CAM_YRES	120
+
+/* Default Linux device paths */
 #define DEFAULT_CAM_DEV		"/dev/i2c-1"	/* I2C2 on BeagleBone Black */
 #define DEFAULT_FB_DEV		"/dev/fb0"
 #define DEFAULT_RPMSG_DEV	"/dev/rpmsgcam31"
@@ -34,17 +42,22 @@
 #define PROG_OPT_STR		"l:c:f:r:s:h"
 
 #define PROG_TRIVIAL_USAGE \
-	"[-l LOG_LEVEL] [-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
+	"[-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-c CAM_DEV]\n" \
+	"		[-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
 
-#define PROG_FULL_USAGE \
-	"\n	-l LOG_LEVEL	Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)" \
-	"\n	-c CAM_DEV	Camera I2C device path (default "DEFAULT_CAM_DEV")" \
-	"\n	-f FB_DEV	LCD display Frame Buffer device path (default "DEFAULT_FB_DEV")" \
-	"\n	-r RPMSG_DEV	RPMsg device path (default "DEFAULT_RPMSG_DEV")" \
-	"\n	-s DUMP_FILE	File path to save the first captured image frame" \
+#define PROG_FULL_USAGE "Options:" \
+	"\n -l LOG_LEVEL	Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)" \
+	"\n -x CAM_XRES	Camera X resolution (default "STR(DEFAULT_CAM_XRES)")" \
+	"\n -y CAM_YRES	Camera Y resolution (default "STR(DEFAULT_CAM_YRES)")" \
+	"\n -c CAM_DEV	Camera I2C device path (default "DEFAULT_CAM_DEV")" \
+	"\n -f FB_DEV	LCD display Frame Buffer device path (default "DEFAULT_FB_DEV")" \
+	"\n -r RPMSG_DEV	RPMsg device path (default "DEFAULT_RPMSG_DEV")" \
+	"\n -s DUMP_FILE	File path to save the first captured image frame" \
 
 struct prog_opts {
 	int log_level;
+	int cam_xres;
+	int cam_yres;
 	const char *cam_dev;
 	const char *fb_dev;
 	const char *rpmsg_dev;
@@ -85,9 +98,6 @@ static struct ring_buffer frame_ring = {
 	.frame_rdy = PTHREAD_COND_INITIALIZER,
 	.frame_rdy_lock = PTHREAD_MUTEX_INITIALIZER,
 };
-
-/* RPMsg camera handle */
-static rpmsg_cam_handle_t cam_handle;
 
 /* Flag for stopping the application gracefully. */
 static volatile sig_atomic_t prog_stopping = 0;
@@ -132,50 +142,45 @@ static int setup_signal_handler()
 static void acquire_frames_cleanup_handler(void *arg)
 {
 	log_info("Stopping frames acquisition thread");
-	rpmsg_cam_stop(cam_handle);
+	rpmsg_cam_stop((rpmsg_cam_handle_t)arg);
 }
 
 /*
  * Receives frames from the camera module into the ring buffer.
  * It acts as a single producer (writer).
  */
-static void *acquire_frames(void *rpmsg_dev)
+static void *acquire_frames(void *rpmsg_cam_h)
 {
+	static struct rpmsg_cam_frame dropped_frame;
 	int head, tail, ret;
-	static struct rpmsg_cam_frame frame;
 
 	log_info("Starting frames acquisition thread");
+	pthread_cleanup_push(acquire_frames_cleanup_handler, rpmsg_cam_h);
 
-	cam_handle = rpmsg_cam_start((const char *)rpmsg_dev);
-	if (cam_handle == NULL) {
-		log_fatal("Failed to initialize PRU communication");
-		prog_stop();
-		return NULL;
+	ret = rpmsg_cam_start(rpmsg_cam_h);
+	if (ret != 0) {
+		log_fatal("Failed to start camera frames capture");
+		goto cleanup;
 	}
 
-	pthread_cleanup_push(acquire_frames_cleanup_handler, NULL);
+	dropped_frame.handle = rpmsg_cam_h;
 
 	while (1) {
-		ret = rpmsg_cam_get_frame(cam_handle, &frame);
-		if (ret == -1) {
-			log_error("Failed to get frame: %d", ret);
-			prog_stop();
-			break;
-		}
-
-		if (ret < -1) {
-			log_debug("Skipping frame due to error: %d", ret);
-			continue; /* Ignore frame & sync errors */
-		}
-
-		log_debug("Received frame: seq=%d", frame.seq);
-
 		head = frame_ring.writer;
 		tail = atomic_load_explicit(&frame_ring.reader, memory_order_relaxed);
 
 		if (CIRC_SPACE(head, tail, FRAME_RING_SIZE) >= 1) {
-			/* Copy the newly-received frame into ring buffer */
-			memcpy(frame_ring.buf[head], &frame, sizeof(struct rpmsg_cam_frame));
+			ret = rpmsg_cam_get_frame(frame_ring.buf[head]);
+			if (ret == -1) {
+				log_error("Failed to get frame: %d", ret);
+				break;
+			}
+			if (ret < -1) {
+				log_debug("Skipping frame due to error: %d", ret);
+				continue; /* Ignore frame & sync errors */
+			}
+
+			log_debug("Received frame: seq=%d", frame_ring.buf[head]->seq);
 
 			/* Finish writing data before incrementing head */
 			atomic_store_explicit(&frame_ring.writer, (head + 1) & (FRAME_RING_SIZE - 1),
@@ -185,14 +190,25 @@ static void *acquire_frames(void *rpmsg_dev)
 			ret = pthread_cond_signal(&frame_ring.frame_rdy);
 			if (ret != 0)
 				log_debug("pthread_cond_signal failed: %s", strerror(ret));
+
 		} else {
-			pthread_testcancel(); /* Add cancellation point */
-			log_debug("Ring buffer full, dropping frame");
+			log_warn("Ring buffer full, dropping frame");
+
+			ret = rpmsg_cam_get_frame(&dropped_frame);
+			if (ret == -1) {
+				log_error("Failed to get frame: %d", ret);
+				break;
+			}
+
+			/* Add cancellation point */
+			pthread_testcancel();
 		}
 	}
 
+cleanup:
 	/* Calls acquire_frames_cleanup_handler() on normal thread termination */
 	pthread_cleanup_pop(1);
+	prog_stop();
 
 	return NULL;
 }
@@ -210,8 +226,9 @@ static void display_frames_cleanup_handler(void *arg)
  * Sends frames to the FB as soon as they are ready.
  * It acts as a single consumer (reader).
  */
-static void *display_frames(void *dump_file)
+static void *display_frames(void *pg_opts)
 {
+	struct prog_opts *opts = (struct prog_opts *)pg_opts;
 	int head, tail, ret;
 
 	log_info("Starting FB display thread");
@@ -225,6 +242,7 @@ static void *display_frames(void *dump_file)
 	}
 
 	pthread_cleanup_push(display_frames_cleanup_handler, NULL);
+	fb_clear();
 
 	while (1) {
 		/* Ensure index is read before content at that index */
@@ -233,12 +251,12 @@ static void *display_frames(void *dump_file)
 
 		if (CIRC_CNT(head, tail, FRAME_RING_SIZE) >= 1) {
 			/* Render image into the frame buffer */
-			write_fb((uint16_t *)frame_ring.buf[tail]->data);
+			fb_write((uint16_t *)frame_ring.buf[tail]->pixels, opts->cam_xres, opts->cam_yres);
 
-			if ((frame_ring.buf[tail]->seq == 0) && (*(const char *)dump_file != 0)) {
-				ret = rpmsg_cam_dump_frame(dump_file, frame_ring.buf[tail]);
+			if ((frame_ring.buf[tail]->seq == 0) && (opts->dump_file[0] != 0)) {
+				ret = rpmsg_cam_dump_frame(frame_ring.buf[tail], opts->dump_file);
 				if (ret == 0)
-					log_info("Dumped frame to file: %s", (const char *)dump_file);
+					log_info("Dumped frame to file: %s", opts->dump_file);
 			}
 
 			/* Finish consuming data before incrementing tail */
@@ -254,6 +272,8 @@ static void *display_frames(void *dump_file)
 
 	/* Calls display_frames_cleanup_handler() on normal thread termination */
 	pthread_cleanup_pop(1);
+	prog_stop();
+
 	return NULL;
 }
 
@@ -273,10 +293,13 @@ static void usage(char *prog_name, int full) {
 int main(int argc, char *argv[])
 {
 	pthread_t frames_acq_thread, frames_disp_thread;
+	rpmsg_cam_handle_t rpmsg_cam_h = NULL;
 	int opt, ret;
 
 	struct prog_opts options = {
 		.log_level = LOG_INFO,
+		.cam_xres = DEFAULT_CAM_XRES,
+		.cam_yres = DEFAULT_CAM_YRES,
 		.cam_dev = DEFAULT_CAM_DEV,
 		.fb_dev = DEFAULT_FB_DEV,
 		.rpmsg_dev = DEFAULT_RPMSG_DEV,
@@ -293,6 +316,18 @@ int main(int argc, char *argv[])
 				options.log_level = LOG_TRACE;
 			else
 				options.log_level = ret;
+			break;
+
+		case 'x':
+			ret = strtol(optarg, NULL, 10);
+			if (ret > 0)
+				options.cam_xres = ret;
+			break;
+
+		case 'y':
+			ret = strtol(optarg, NULL, 10);
+			if (ret > 0)
+				options.cam_yres = ret;
 			break;
 
 		case 'c':
@@ -334,11 +369,7 @@ int main(int argc, char *argv[])
 	/* Setup the signal handler for stopping app gracefully */
     ret = setup_signal_handler();
 	if (ret != 0)
-		goto fail;
-
-	/* Allocate memory for frames circular buffer */
-	for (int i = 0; i < FRAME_RING_SIZE; i++)
-		frame_ring.buf[i] = malloc(sizeof(struct rpmsg_cam_frame));
+		exit(EXIT_FAILURE);
 
 	/* Configure the OV7670 Camera Module via the I2C-like interface */
 	if (options.cam_dev[0] != '-') {
@@ -346,34 +377,54 @@ int main(int argc, char *argv[])
 		ret = cam_init(options.cam_dev);
 		if (ret != 0) {
 			log_fatal("Failed to initialize camera module");
-			goto fail;
+			goto free_ring;
 		}
 	}
 
 	/* Initialize LCD frame buffer */
 	if (options.fb_dev[0] != '-') {
 		log_info("Initializing LCD frame buffer");
-		ret = init_fb(options.fb_dev);
+		ret = fb_init(options.fb_dev);
 		if (ret != 0) {
 			log_fatal("Failed to initialize frame buffer");
-			goto fail;
+			goto free_ring;
 		}
 	}
 
-	log_info("Creating frame acquisition thread");
-	ret = pthread_create(&frames_acq_thread, NULL, acquire_frames, (void *)options.rpmsg_dev);
-	if (ret != 0) {
-		log_fatal("Failed to create thread: %s", strerror(ret));
-		goto fail;
+	/* Initialize PRUs via RPMsg */
+	log_info("Initializing PRUs for %dx%d frame acquisition",
+			 options.cam_xres, options.cam_yres);
+	rpmsg_cam_h = rpmsg_cam_init(options.rpmsg_dev, options.cam_xres, options.cam_yres);
+	if (rpmsg_cam_h == NULL) {
+		log_fatal("Failed to initialize RPMsg camera communication");
+		ret = -1;
+		goto free_ring;
 	}
 
-	log_info("Creating frame display thread");
-	ret = pthread_create(&frames_disp_thread, NULL, display_frames, (void *)options.dump_file);
+	/* Allocate memory for frames circular buffer */
+	for (int i = 0; i < FRAME_RING_SIZE; i++) {
+		frame_ring.buf[i] = malloc(sizeof(struct rpmsg_cam_frame));
+		if (frame_ring.buf[i] == NULL) {
+			log_fatal("Not enough memory");
+			ret = -1;
+			goto free_ring;
+		}
+		frame_ring.buf[i]->handle = rpmsg_cam_h;
+	}
+
+	log_debug("Creating frame display thread");
+	ret = pthread_create(&frames_disp_thread, NULL, display_frames, &options);
 	if (ret != 0) {
-		log_fatal("Failed to create thread: %s", strerror(ret));
-		pthread_cancel(frames_acq_thread);
-		pthread_join(frames_acq_thread, NULL);
-		goto fail;
+		log_fatal("Failed to create frame display thread: %s", strerror(ret));
+		goto free_ring;
+	}
+
+	log_debug("Creating frame acquisition thread");
+	ret = pthread_create(&frames_acq_thread, NULL, acquire_frames, rpmsg_cam_h);
+	if (ret != 0) {
+		log_fatal("Failed to create frame acquisition thread: %s", strerror(ret));
+		pthread_cancel(frames_disp_thread);
+		goto join_disp;
 	}
 
 	while (prog_stopping == 0)
@@ -385,11 +436,15 @@ int main(int argc, char *argv[])
 	pthread_cancel(frames_disp_thread);
 
 	pthread_join(frames_acq_thread, NULL);
+join_disp:
 	pthread_join(frames_disp_thread, NULL);
 
-	exit(EXIT_SUCCESS);
+free_ring:
+	for (int i = 0; i < FRAME_RING_SIZE; i++)
+		free(frame_ring.buf[i]);
 
-fail:
-	release_fb();
-	exit(EXIT_FAILURE);
+	rpmsg_cam_release(rpmsg_cam_h);
+	fb_release();
+
+	exit(ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
 }
