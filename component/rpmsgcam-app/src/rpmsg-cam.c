@@ -109,9 +109,9 @@ fail_write:
 }
 
 /*
- * Read a PRU cap frame message having the expected sequence number.
- * If exp_seq is negative, a PRU info message is expected instead.
- * The caller can access the content via data and len parameters.
+ * Reads a PRU cap frame message having the expected sequence number.
+ * Additionally, receives INFO and LOG messages.
+ * The caller can access the message content via data and len parameters.
  *
  * Returns:
  *  0: Received non-frame message, to be ignored
@@ -125,6 +125,8 @@ static int rpmsg_cam_read_msg(struct rpmsg_cam_handle *h, int exp_seq,
 {
 	struct bcam_pru_msg* msg = (struct bcam_pru_msg*)h->rpmsg_buf;
 
+	log_trace("RPMSg start reading msg");
+
 	*len = read(h->rpmsg_fd, h->rpmsg_buf, RPMSG_MESSAGE_SIZE);
 	if (*len < 0) {
 		log_error("RPMsg read error: %s", strerror(errno));
@@ -136,10 +138,11 @@ static int rpmsg_cam_read_msg(struct rpmsg_cam_handle *h, int exp_seq,
 		return -1;
 	}
 
+	log_trace("RPMSg end reading msg: type=%d, len=%d", msg->type, *len);
+	hexdump(h->rpmsg_buf, *len, 16, 8);
+
 	switch (msg->type) {
 	case BCAM_PRU_MSG_INFO:
-		if (exp_seq > 0)
-			log_warn("Received unexpected info RPMsg type");
 		*len -= msg->info_hdr.data - h->rpmsg_buf;
 		*data = msg->info_hdr.data;
 		return 0;
@@ -165,7 +168,7 @@ static int rpmsg_cam_read_msg(struct rpmsg_cam_handle *h, int exp_seq,
 }
 
 /*
- * Transfer a full image frame.
+ * Transfers a full image frame.
  * Returns:
  *  0: Successful transfer
  * -1: Read error
@@ -178,7 +181,7 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 	int seq = 0, cnt = 0, ret, data_len;
 	uint8_t *data;
 
-	log_debug("Synchronizing frame start");
+	log_debug("Synchronizing frame start section");
 
 	/* Keep reading RPMsg packets until receiving a "frame start" section */
 	while (seq == 0) {
@@ -187,10 +190,11 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 		switch (ret) {
 		case BCAM_FRM_START:
 			if (data_len > sizeof(frame->data)) {
-				log_debug("Received start frame too large: %d vs. %d bytes",
+				log_debug("Received start frame section too large: %d vs. %d bytes",
 						  data_len, sizeof(frame->data));
 				return -2;
 			}
+			log_trace("Received start frame section");
 			memcpy(frame->data, data, data_len);
 			cnt = data_len;
 			seq = 1;
@@ -213,7 +217,7 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 		}
 	}
 
-	log_debug("Synchronizing frame end");
+	log_debug("Synchronizing frame end section");
 
 	/* Read remaining frame messages until receiving a "frame end" section */
 	while (1) {
@@ -221,7 +225,7 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 
 		switch (ret) {
 		case BCAM_FRM_START:
-			log_debug("Received a new frame start, reset current frame");
+			log_debug("Received a new frame start section, reset current frame");
 			seq = 0;
 			cnt = 0;
 		case BCAM_FRM_BODY:
@@ -237,8 +241,7 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 			continue;
 
 		default:
-			if (ret != -1)
-				log_debug("Discarding frame on RPMsg error: %d", ret);
+			log_debug("Discarding frame on RPMsg error: %d", ret);
 			return ret;
 		}
 
@@ -254,6 +257,7 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 				return -2;
 			}
 
+			log_debug("Received end frame section: count=%d", seq);
 			frame->seq = h->frame_cnt++;
 			break;
 		}
