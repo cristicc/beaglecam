@@ -461,8 +461,17 @@ void main(void)
 			/* Force sending completed frame */
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
 
-			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_DEBUG,
-				       "Frame completed, capture stopped");
+			if (smem->cap_config.test_mode != 0) {
+				start_stop_capture(0);
+				/* Wait 0.5 s */
+				__delay_cycles(100000000);
+
+				start_stop_capture(1);
+				crt_frame_data_len = 0;
+				exp_cap_seq = 1;
+				crt_bank = 0;
+			}
+
 		} else {
 			capture_buf.seq = (exp_cap_seq > 1 ? BCAM_FRM_BODY : BCAM_FRM_START);
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 0);

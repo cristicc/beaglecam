@@ -74,7 +74,7 @@ uint8_t check_pru1_cmd() {
 uint8_t generate_test_data(struct cap_data *buf)
 {
 	uint32_t img_part_size = smem->cap_config.img_sz / 3;
-	uint32_t img_part_off = buf->seq++ * sizeof(buf->data);
+	uint32_t img_part_off = buf->seq * sizeof(buf->data);
 	uint8_t iter = 0, ret = 0;
 
 	while (iter < sizeof(buf->data)) {
@@ -143,9 +143,13 @@ void main(void)
 		if (capture_started == 0)
 			continue;
 
+		buf.seq++;
+
 		if (smem->cap_config.test_mode != 0) {
-			if (generate_test_data(&buf) != 0)
+			if (generate_test_data(&buf) != 0) {
 				capture_started = 0;
+				continue;
+			}
 		} else {
 			//TODO: get data from camera module
 		}

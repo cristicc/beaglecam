@@ -39,16 +39,17 @@
 #define DEFAULT_RPMSG_DEV	"/dev/rpmsgcam31"
 
 /* Program options */
-#define PROG_OPT_STR		"l:c:f:r:s:h"
+#define PROG_OPT_STR		"l:x:y:m:c:f:r:s:h"
 
 #define PROG_TRIVIAL_USAGE \
-	"[-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-c CAM_DEV]\n" \
-	"		[-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
+	"[-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-m MAX_FRAMES]\n" \
+	"		[-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
 
 #define PROG_FULL_USAGE "Options:" \
 	"\n -l LOG_LEVEL	Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)" \
 	"\n -x CAM_XRES	Camera X resolution (default "STR(DEFAULT_CAM_XRES)")" \
 	"\n -y CAM_YRES	Camera Y resolution (default "STR(DEFAULT_CAM_YRES)")" \
+	"\n -m MAX_FRAMES	Exit after receiving the indicated no. of frames" \
 	"\n -c CAM_DEV	Camera I2C device path (default "DEFAULT_CAM_DEV")" \
 	"\n -f FB_DEV	LCD display Frame Buffer device path (default "DEFAULT_FB_DEV")" \
 	"\n -r RPMSG_DEV	RPMsg device path (default "DEFAULT_RPMSG_DEV")" \
@@ -58,6 +59,7 @@ struct prog_opts {
 	int log_level;
 	int cam_xres;
 	int cam_yres;
+	int max_frames;
 	const char *cam_dev;
 	const char *fb_dev;
 	const char *rpmsg_dev;
@@ -142,6 +144,7 @@ static int setup_signal_handler()
 static void acquire_frames_cleanup_handler(void *arg)
 {
 	log_info("Stopping frames acquisition thread");
+
 	rpmsg_cam_stop((rpmsg_cam_handle_t)arg);
 }
 
@@ -219,6 +222,8 @@ cleanup:
 static void display_frames_cleanup_handler(void *arg)
 {
 	log_info("Stopping FB display thread");
+
+	fb_clear();
 	pthread_mutex_unlock(&frame_ring.frame_rdy_lock);
 }
 
@@ -257,6 +262,11 @@ static void *display_frames(void *pg_opts)
 				ret = rpmsg_cam_dump_frame(frame_ring.buf[tail], opts->dump_file);
 				if (ret == 0)
 					log_info("Dumped frame to file: %s", opts->dump_file);
+			}
+
+			if ((opts->max_frames > 0) && (frame_ring.buf[tail]->seq + 1 >= opts->max_frames)) {
+				log_info("Reached max allowed no. of frames: %d", opts->max_frames);
+				break;
 			}
 
 			/* Finish consuming data before incrementing tail */
@@ -300,6 +310,7 @@ int main(int argc, char *argv[])
 		.log_level = LOG_INFO,
 		.cam_xres = DEFAULT_CAM_XRES,
 		.cam_yres = DEFAULT_CAM_YRES,
+		.max_frames = 0,
 		.cam_dev = DEFAULT_CAM_DEV,
 		.fb_dev = DEFAULT_FB_DEV,
 		.rpmsg_dev = DEFAULT_RPMSG_DEV,
@@ -328,6 +339,12 @@ int main(int argc, char *argv[])
 			ret = strtol(optarg, NULL, 10);
 			if (ret > 0)
 				options.cam_yres = ret;
+			break;
+
+		case 'm':
+			ret = strtol(optarg, NULL, 10);
+			if (ret > 0)
+				options.max_frames = ret;
 			break;
 
 		case 'c':
