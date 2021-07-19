@@ -26,10 +26,16 @@ static const char *log_level_colors[] = {
 };
 #endif
 
+/*
+ * Change current log level.
+ */
 void log_set_level(int level) {
 	log_level = level;
 }
 
+/*
+ * Writes a new log message to the console.
+ */
 void log_write(int level, const char *file, int line, const char *fmt, ...) {
 	char msg[LOG_LINE_MAX_LEN];
 	struct timeval tval;
@@ -65,14 +71,14 @@ void log_write(int level, const char *file, int line, const char *fmt, ...) {
 }
 
 /**
- * Displays the content of a buffer in hexadecimal format.
+ * Writes to the console the content of a buffer in hexadecimal format.
  *
  * @data: buffer to display
  * @length: length of the buffer
  * @linelen: number of chars per output line
  * @chunklen: number of chars per chunk
  */
-int hexdump(void const *data, size_t length, int linelen, int chunklen)
+int log_hexdump(void const *data, size_t length, int linelen, int chunklen)
 {
 	char buffer[512];
 	char *ptr;
@@ -102,8 +108,8 @@ int hexdump(void const *data, size_t length, int linelen, int chunklen)
 		/* Loop through the hex chars of this line */
 		lrem = remaining;
 		splitcount = 0;
-		for (pos = 0; pos < linelen; pos++) {
 
+		for (pos = 0; pos < linelen; pos++) {
 			/* Split hex section if required */
 			if (chunklen == splitcount++) {
 				sprintf(ptr, "  ");
@@ -127,6 +133,7 @@ int hexdump(void const *data, size_t length, int linelen, int chunklen)
 		/* Loop through the ASCII chars of this line */
 		lrem = remaining;
 		splitcount = 0;
+
 		for (pos = 0; pos < linelen; pos++) {
 			unsigned char c;
 
@@ -155,6 +162,19 @@ int hexdump(void const *data, size_t length, int linelen, int chunklen)
 		inptr += linelen;
 		remaining -= linelen;
 	}
+
+	return 0;
+}
+
+/*
+ * Gets the number of microseconds elapsed since the Epoch.
+ */
+unsigned long long log_get_time_usec()
+{
+	struct timeval tval;
+
+	if (gettimeofday(&tval, NULL) == 0)
+		return (unsigned long long)(tval.tv_sec * 1000000 + tval.tv_usec);
 
 	return 0;
 }

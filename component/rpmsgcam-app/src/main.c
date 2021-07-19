@@ -66,6 +66,13 @@ struct prog_opts {
 	const char *dump_file;
 };
 
+/* Frame display statistics */
+struct frame_disp_stats {
+	unsigned long long start_time;
+	unsigned long long end_time;
+	unsigned int total_frames;
+};
+
 /* Utility to count elements in the ring buffer. */
 #define CIRC_CNT(head, tail, size) (((head) - (tail)) & ((size) - 1))
 /*
@@ -221,10 +228,18 @@ cleanup:
  */
 static void display_frames_cleanup_handler(void *arg)
 {
+	struct frame_disp_stats *frame_stats = (struct frame_disp_stats *)arg;
+	float fps;
+
+	frame_stats->end_time = log_get_time_usec();
+	fps = 1000000.0 * frame_stats->total_frames /
+			(frame_stats->end_time - frame_stats->start_time);
+
 	log_info("Stopping FB display thread");
 
-	fb_clear();
 	pthread_mutex_unlock(&frame_ring.frame_rdy_lock);
+
+	log_info("Frame display stats: fps=%.1f, cnt=%d", fps, frame_stats->total_frames);
 }
 
 /*
@@ -234,9 +249,16 @@ static void display_frames_cleanup_handler(void *arg)
 static void *display_frames(void *pg_opts)
 {
 	struct prog_opts *opts = (struct prog_opts *)pg_opts;
+	struct frame_disp_stats frame_stats;
 	int head, tail, ret;
 
 	log_info("Starting FB display thread");
+
+	fb_clear();
+	if (opts->max_frames == 0) {
+		prog_stop();
+		return NULL;
+	}
 
 	/* Cond var mutex must be locked before calling pthread_cond_wait() */
 	ret = pthread_mutex_lock(&frame_ring.frame_rdy_lock);
@@ -246,8 +268,10 @@ static void *display_frames(void *pg_opts)
 		return NULL;
 	}
 
-	pthread_cleanup_push(display_frames_cleanup_handler, NULL);
-	fb_clear();
+	frame_stats.start_time = log_get_time_usec();
+	frame_stats.total_frames = 0;
+
+	pthread_cleanup_push(display_frames_cleanup_handler, &frame_stats);
 
 	while (1) {
 		/* Ensure index is read before content at that index */
@@ -257,6 +281,7 @@ static void *display_frames(void *pg_opts)
 		if (CIRC_CNT(head, tail, FRAME_RING_SIZE) >= 1) {
 			/* Render image into the frame buffer */
 			fb_write((uint16_t *)frame_ring.buf[tail]->pixels, opts->cam_xres, opts->cam_yres);
+			frame_stats.total_frames++;
 
 			if ((frame_ring.buf[tail]->seq == 0) && (opts->dump_file[0] != 0)) {
 				ret = rpmsg_cam_dump_frame(frame_ring.buf[tail], opts->dump_file);
@@ -310,7 +335,7 @@ int main(int argc, char *argv[])
 		.log_level = LOG_INFO,
 		.cam_xres = DEFAULT_CAM_XRES,
 		.cam_yres = DEFAULT_CAM_YRES,
-		.max_frames = 0,
+		.max_frames = -1,
 		.cam_dev = DEFAULT_CAM_DEV,
 		.fb_dev = DEFAULT_FB_DEV,
 		.rpmsg_dev = DEFAULT_RPMSG_DEV,
@@ -343,7 +368,7 @@ int main(int argc, char *argv[])
 
 		case 'm':
 			ret = strtol(optarg, NULL, 10);
-			if (ret > 0)
+			if (ret >= 0)
 				options.max_frames = ret;
 			break;
 

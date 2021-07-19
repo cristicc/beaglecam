@@ -463,8 +463,8 @@ void main(void)
 
 			if (smem->cap_config.test_mode != 0) {
 				start_stop_capture(0);
-				/* Wait 0.5 s */
-				__delay_cycles(100000000);
+				/* Wait 0.05 s */
+				__delay_cycles(10000000);
 
 				start_stop_capture(1);
 				crt_frame_data_len = 0;

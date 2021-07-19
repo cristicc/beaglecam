@@ -62,7 +62,7 @@ static int rpmsg_cam_read_msg(struct rpmsg_cam_handle *h, int exp_seq,
 	}
 
 	log_trace("RPMSg end reading msg: type=%d, len=%d", msg->type, *len);
-	hexdump(h->rpmsg_buf, *len, 16, 8);
+	log_hexdump(h->rpmsg_buf, *len, 16, 8);
 
 	switch (msg->type) {
 	case BCAM_PRU_MSG_INFO:
