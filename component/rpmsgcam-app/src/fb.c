@@ -1,3 +1,9 @@
+/*
+ * Utility to display RGB565 image content via Frame Buffer.
+ *
+ * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ */
+
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/fb.h>
@@ -12,15 +18,15 @@
 /* TODO: typedef void *fb_handle_t; */
 static struct fb_fix_screeninfo finfo;
 static struct fb_var_screeninfo vinfo;
+static uint32_t screen_size;
 static int fbfd = -1;
 static char *fbp = 0;
 
 /*
  * Initialize frame buffer.
  */
-int init_fb(const char *dev_path)
+int fb_init(const char *dev_path)
 {
-	long int screen_size = 0;
 	int ret;
 
 	fbfd = open(dev_path, O_RDWR);
@@ -47,14 +53,14 @@ int init_fb(const char *dev_path)
 			 vinfo.xres, vinfo.yres, vinfo.bits_per_pixel,
 			 vinfo.xoffset, vinfo.yoffset);
 
-	/* Compute the screen size (bytes) */
-	screen_size = vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8;
-
 	if (vinfo.bits_per_pixel != 16) {
 		log_error("Expected 16 bpp, but found: %s", vinfo.bits_per_pixel);
 		ret = -1;
 		goto fail;
 	}
+
+	/* Compute the screen size (bytes) */
+	screen_size = vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8;
 
 	/* Map device to memory */
 	fbp = (char *)mmap(0, screen_size, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
@@ -72,31 +78,60 @@ fail:
 	return ret;
 }
 
-/*
+/**
  * Write RGB565 pixel data into the frame buffer.
- * TODO: provide source image size and scale to FB screen size
+ *
+ * @rgb565: RGB565 pixel data in BGR (little endian) format
+ * @xres: Pixel data X resolution
+ * @yres: Pixel data Y resolution
  */
-void write_fb(uint16_t *rgb565)
+void fb_write(uint16_t *rgb565, int xres, int yres)
 {
+	int fb_xoff, fb_yoff, fb_xres, fb_yres;
 	int x, y;
 
 	if (fbfd < 0)
 		return;
 
-	for (y = 0; y < 120; y++)
-		for (x = 0; x < 160; x++)
-			*((uint16_t *)(fbp + y * finfo.line_length + x * 2)) = rgb565[y * 160 + x];
+	fb_xoff = (vinfo.xres - xres) / 2;
+	if (fb_xoff < 0) {
+		fb_xoff = 0;
+		fb_xres = vinfo.xres;
+	} else {
+		fb_xres = xres;
+	}
+
+	fb_yoff = (vinfo.yres - yres) / 2;
+	if (fb_yoff < 0) {
+		fb_yoff = 0;
+		fb_yres = vinfo.yres;
+	} else {
+		fb_yres = yres;
+	}
+
+	for (y = 0; y < fb_yres; y++)
+		for (x = 0; x < fb_xres; x++)
+			((uint16_t *)(fbp))[(y + fb_yoff) * vinfo.xres
+								+ x + fb_xoff] = rgb565[y * fb_xres + x];
+}
+
+/*
+ * Writes a black frame.
+ */
+void fb_clear()
+{
+	memset(fbp, 0, screen_size);
 }
 
 /*
  * Release frame buffer resources.
  */
-void release_fb()
+void fb_release()
 {
 	if (fbfd < 0)
 		return;
 
-	munmap(fbp, vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8);
+	munmap(fbp, screen_size);
 	close(fbfd);
 	fbfd = -1;
 }
