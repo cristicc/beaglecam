@@ -31,14 +31,24 @@
 #define DEFAULT_RPMSG_DEV	"/dev/rpmsgcam31"
 
 /* Program options */
-#define PROG_OPT_STR		"l:c:f:r:h"
-#define PROG_USAGE_FMT		"%s [-l log_level] [-c cam_dev] [-f fb_dev] [-r rpmsg_dev] [-h]"
+#define PROG_OPT_STR		"l:c:f:r:s:h"
+
+#define PROG_TRIVIAL_USAGE \
+	"[-l LOG_LEVEL] [-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
+
+#define PROG_FULL_USAGE \
+	"\n	-l LOG_LEVEL	Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)" \
+	"\n	-c CAM_DEV	Camera I2C device path (default "DEFAULT_CAM_DEV")" \
+	"\n	-f FB_DEV	LCD display Frame Buffer device path (default "DEFAULT_FB_DEV")" \
+	"\n	-r RPMSG_DEV	RPMsg device path (default "DEFAULT_RPMSG_DEV")" \
+	"\n	-s DUMP_FILE	File path to save the first captured image frame" \
 
 struct prog_opts {
 	int log_level;
 	const char *cam_dev;
 	const char *fb_dev;
 	const char *rpmsg_dev;
+	const char *dump_file;
 };
 
 /* Utility to count elements in the ring buffer. */
@@ -55,7 +65,7 @@ struct prog_opts {
 
 struct ring_buffer {
 	/* Data buffer */
-	struct rpmsg_cam_frame* buf[FRAME_RING_SIZE];
+	struct rpmsg_cam_frame *buf[FRAME_RING_SIZE];
 
 	/* Frame buffer indexes for reader (tail) & writer (head) */
 	_Atomic int reader;
@@ -200,21 +210,11 @@ static void display_frames_cleanup_handler(void *arg)
  * Sends frames to the FB as soon as they are ready.
  * It acts as a single consumer (reader).
  */
-static void *display_frames(void *fb_dev)
+static void *display_frames(void *dump_file)
 {
 	int head, tail, ret;
-	int fb_dev_valid;
 
 	log_info("Starting FB display thread");
-	fb_dev_valid = (*(const char *)fb_dev != '-');
-
-	/* Initialize FB */
-	if (fb_dev_valid)
-		if (init_fb((const char *)fb_dev) != 0) {
-			log_fatal("Failed to initialize frame buffer");
-			prog_stop();
-			return NULL;
-		}
 
 	/* Cond var mutex must be locked before calling pthread_cond_wait() */
 	ret = pthread_mutex_lock(&frame_ring.frame_rdy_lock);
@@ -233,8 +233,13 @@ static void *display_frames(void *fb_dev)
 
 		if (CIRC_CNT(head, tail, FRAME_RING_SIZE) >= 1) {
 			/* Render image into the frame buffer */
-			if (fb_dev_valid)
-				write_fb(frame_ring.buf[tail]->data);
+			write_fb((uint16_t *)frame_ring.buf[tail]->data);
+
+			if ((frame_ring.buf[tail]->seq == 0) && (*(const char *)dump_file != 0)) {
+				ret = rpmsg_cam_dump_frame(dump_file, frame_ring.buf[tail]);
+				if (ret == 0)
+					log_info("Dumped frame to file: %s", (const char *)dump_file);
+			}
 
 			/* Finish consuming data before incrementing tail */
 			atomic_store_explicit(&frame_ring.reader, (tail + 1) & (FRAME_RING_SIZE - 1),
@@ -255,8 +260,11 @@ static void *display_frames(void *fb_dev)
 /*
  * Prints program help text.
  */
-static void usage(char *prog_name) {
-	fprintf(stderr, PROG_USAGE_FMT "\n", prog_name);
+static void usage(char *prog_name, int full) {
+	fprintf(stderr, "Usage: %s "PROG_TRIVIAL_USAGE"\n", prog_name);
+
+	if (full)
+		fprintf(stderr, PROG_FULL_USAGE"\n");
 }
 
 /*
@@ -272,6 +280,7 @@ int main(int argc, char *argv[])
 		.cam_dev = DEFAULT_CAM_DEV,
 		.fb_dev = DEFAULT_FB_DEV,
 		.rpmsg_dev = DEFAULT_RPMSG_DEV,
+		.dump_file = "",
 	};
 
 	while ((opt = getopt(argc, argv, PROG_OPT_STR)) != -1) {
@@ -298,18 +307,22 @@ int main(int argc, char *argv[])
 			options.rpmsg_dev = optarg;
 			break;
 
+		case 's':
+			options.dump_file = optarg;
+			break;
+
 		case 'h':
-			usage(basename(argv[0]));
+			usage(basename(argv[0]), 1);
 			exit(EXIT_SUCCESS);
 
 		default: /* '?' */
-			usage(basename(argv[0]));
+			usage(basename(argv[0]), 0);
 			exit(EXIT_FAILURE);
 		}
 	}
 
 	if (optind < argc) {
-		usage(basename(argv[0]));
+		usage(basename(argv[0]), 0);
 		exit(EXIT_FAILURE);
 	}
 
@@ -329,9 +342,22 @@ int main(int argc, char *argv[])
 
 	/* Configure the OV7670 Camera Module via the I2C-like interface */
 	if (options.cam_dev[0] != '-') {
+		log_info("Initializing camera module");
 		ret = cam_init(options.cam_dev);
-		if (ret != 0)
+		if (ret != 0) {
+			log_fatal("Failed to initialize camera module");
 			goto fail;
+		}
+	}
+
+	/* Initialize LCD frame buffer */
+	if (options.fb_dev[0] != '-') {
+		log_info("Initializing LCD frame buffer");
+		ret = init_fb(options.fb_dev);
+		if (ret != 0) {
+			log_fatal("Failed to initialize frame buffer");
+			goto fail;
+		}
 	}
 
 	log_info("Creating frame acquisition thread");
@@ -342,7 +368,7 @@ int main(int argc, char *argv[])
 	}
 
 	log_info("Creating frame display thread");
-	ret = pthread_create(&frames_disp_thread, NULL, display_frames, (void *)options.fb_dev);
+	ret = pthread_create(&frames_disp_thread, NULL, display_frames, (void *)options.dump_file);
 	if (ret != 0) {
 		log_fatal("Failed to create thread: %s", strerror(ret));
 		pthread_cancel(frames_acq_thread);
@@ -364,5 +390,6 @@ int main(int argc, char *argv[])
 	exit(EXIT_SUCCESS);
 
 fail:
+	release_fb();
 	exit(EXIT_FAILURE);
 }
