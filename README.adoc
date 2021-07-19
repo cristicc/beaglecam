@@ -582,7 +582,59 @@ root@beaglecam:~# echo stop > /sys/class/remoteproc/remoteproc1/state
 [184246.660551] remoteproc remoteproc1: stopped remote processor 4a338000.pru
 ----
 
-=== Update PRU firmware and RPMSG camera driver
+
+=== Generate RGB565 test images via PRU firmware
+
+The `rpmsgcam-app` utility can be used to trigger test data generation on PRU0,
+which is passed to PRU1 in 32 byte chunks and eventually read by the application
+via the RPMsg bus in frame sections up to 496 bytes in size.
+
+The resolution of the test images is configurable via the program arguments:
+
+[source,sh]
+----
+root@beaglecam:~# rpmsgcam-app -h
+Usage: rpmsgcam-app [-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-m MAX_FRAMES]
+		[-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]
+Options:
+ -l LOG_LEVEL	Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)
+ -x CAM_XRES	Camera X resolution (default 160)
+ -y CAM_YRES	Camera Y resolution (default 120)
+ -m MAX_FRAMES	Exit after receiving the indicated no. of frames
+ -c CAM_DEV	Camera I2C device path (default /dev/i2c-1)
+ -f FB_DEV	LCD display Frame Buffer device path (default /dev/fb0)
+ -r RPMSG_DEV	RPMsg device path (default /dev/rpmsgcam31)
+ -s DUMP_FILE	File path to save the first captured image frame
+----
+
+Run the command bellow to generate 320x240 image frames in RGB565 format and
+display them on the LCD available via `/dev/fb0` frame buffer.
+
+[TIP]
+Use the `-m` parameter to automatically stop the application after receiving
+the indicated no. of frames.
+
+[source,sh]
+----
+root@beaglecam:~# rpmsgcam-app -l 3 -x 320 -y 240 -c - -f /dev/fb0 -r /dev/rpmsgcam31 -m 1
+1970-01-01 12:33:47.713 INFO  main.c:409: Starting rpmsgcam app
+1970-01-01 12:33:47.714 INFO  main.c:426: Initializing LCD frame buffer
+1970-01-01 12:33:47.714 INFO  fb.c:51: FB screen info: 480x272, 16bpp, xoff=0, yoff=0
+1970-01-01 12:33:47.715 INFO  main.c:435: Initializing PRUs for 320x240 frame acquisition
+1970-01-01 12:33:47.716 INFO  PRU:1: Capture configured
+1970-01-01 12:33:47.718 INFO  main.c:167: Starting frames acquisition thread
+1970-01-01 12:33:47.719 INFO  PRU:1: Capture started
+1970-01-01 12:33:47.719 INFO  main.c:255: Starting FB display thread
+1970-01-01 12:33:47.899 INFO  main.c:293: Reached max allowed no. of frames: 1
+1970-01-01 12:33:47.900 INFO  main.c:238: Stopping FB display thread
+1970-01-01 12:33:47.901 INFO  main.c:242: Frame display stats: fps=5.6, cnt=1
+1970-01-01 12:33:48.718 INFO  main.c:473: Stopping rpmsgcam app
+1970-01-01 12:33:48.719 INFO  main.c:153: Stopping frames acquisition thread
+1970-01-01 12:33:48.720 INFO  PRU:1: Capture stopped
+----
+
+
+=== Update PRU firmware and RPMsg camera driver
 
 The main PRU firmware sources are `component/rootfs/br2-external/package/prufw/src/main-pru{0,1}.c`
 while the related kernel module is `component/rpmsgcam-drv/src/rpmsg_cam.c`. The corresponding
@@ -610,7 +662,7 @@ $ tools/ssh-cmd.sh -t 10.0.1.100 'printf "%b" "\xbe\xca\x00" >/dev/rpmsgcam31'
 $ root@beaglecam:~# cat /dev/rpmsgcam31
 
 # Trigger data capture by sending the START cmd, followed by STOP
-$ tools/ssh-cmd.sh -t 10.0.1.100 'printf "%b" "\xbe\xca\x02" >/dev/rpmsgcam31; sleep 5; printf "%b" "\xbe\xca\x03" >/dev/rpmsgcam31'
+$ tools/ssh-cmd.sh -t 10.0.1.100 'printf "%b" "\xbe\xca\x03" >/dev/rpmsgcam31; sleep 1; printf "%b" "\xbe\xca\x04" >/dev/rpmsgcam31'
 
 # View captured data on device terminal
 root@beaglecam:~# cat /dev/rpmsgcam31 | hexdump -C
@@ -693,8 +745,9 @@ First frame decoded!
 
 == Further development
 
-* Implement a v4l2 Linux kernel driver for the camera module
-* Add support for other boards (e.g. RaspberryPi, BeagleV)
+* Fix (random) rpmsg errors: `virtio_rpmsg_bus virtio0: inbound msg too big: (512, 1280)`
+* Add v4l2 support to the RPMsg camera module Linux kernel driver
+* Add support for additional boards (e.g. RaspberryPi, BeagleV)
 
 
 [bibliography]
