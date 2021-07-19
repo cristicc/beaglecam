@@ -23,7 +23,7 @@ struct bcam_arm_msg {
 	};
 	uint8_t id;			/* Member of enum bcam_arm_msg_type */
 	uint8_t data[0];		/* Message data (currently not used) */
-};
+} __attribute__((packed));
 
 /* Messages sent from PRU1 to ARM. */
 struct bcam_pru_msg {
@@ -31,24 +31,24 @@ struct bcam_pru_msg {
 
 	union {
 		/* BCAM_PRU_MSG_INFO type */
-		struct {
+		struct __attribute__((packed)) {
 			uint8_t data[0];	/* Command response */
 		} info_hdr;
 
 		/* BCAM_PRU_MSG_LOG type */
-		struct {
+		struct __attribute__((packed)) {
 			uint8_t level;		/* Member of enum bcam_pru_log_level */
 			uint8_t data[0];	/* Message string */
 		} log_hdr;
 
 		/* BCAM_PRU_MSG_CAP type */
-		struct {
+		struct __attribute__((packed)) {
 			uint8_t frm;		/* Member of enum bcam_frm_sect */
 			uint16_t seq;		/* Data sequence no. */
 			uint8_t data[0];	/* Captured image data */
 		} cap_hdr;
 	};
-};
+} __attribute__((packed));
 
 /* IDs for messages (commands) sent from ARM to PRU1. */
 enum bcam_arm_msg_type {
