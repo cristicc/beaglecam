@@ -22,92 +22,14 @@
  * Not directly exposed to user API, which uses rpmsg_cam_handle_t instead.
  */
 struct rpmsg_cam_handle {
-	int frame_cnt;							/* Counter for image frames */
+	uint32_t img_xres;						/* Image X resolution */
+	uint32_t img_yres;						/* Image Y resolution */
+	uint32_t img_bpp;						/* Image bits per pixel */
+	uint32_t img_sz;						/* img_xres * img_yres * img_bpp */
+	uint32_t frame_cnt;						/* Counter for image frames */
 	int rpmsg_fd;							/* RPMsg file descriptor */
 	uint8_t rpmsg_buf[RPMSG_MESSAGE_SIZE];	/* RPMsg receive buffer */
 };
-
-/*
- * Starts capturing frames via PRU.
- *
- * Returns an opaque handle to a dynamically allocated internal state
- * structure or NULL in case of an error.
- */
-rpmsg_cam_handle_t rpmsg_cam_start(const char *rpmsg_dev_path)
-{
-	struct rpmsg_cam_handle *h;
-	int ret;
-
-	struct bcam_arm_msg start_cmd = {
-		.magic_byte.high = BCAM_ARM_MSG_MAGIC >> 8,
-		.magic_byte.low = BCAM_ARM_MSG_MAGIC & 0xff,
-		.id = BCAM_ARM_MSG_CAP_START,
-	};
-
-	h = malloc(sizeof(*h));
-	if (h == NULL) {
-		log_fatal("Not enough memory");
-		return h;
-	}
-
-	h->rpmsg_fd = open(rpmsg_dev_path, O_RDWR);
-	if (h->rpmsg_fd < 0) {
-		log_error("Failed to open %s: %s", rpmsg_dev_path, strerror(errno));
-		goto fail_open;
-	}
-
-	ret = write(h->rpmsg_fd, &start_cmd, sizeof(start_cmd));
-	if (ret < 0) {
-		log_error("Failed to send PRU cap_start command: %s", strerror(errno));
-		goto fail_write;
-	}
-
-	if (ret != sizeof(start_cmd)) {
-		log_error("Failed to send full PRU cap_start command");
-		goto fail_write;
-	}
-
-	h->frame_cnt = 0;
-	return h;
-
-fail_write:
-	close(h->rpmsg_fd);
-
-fail_open:
-	free(h);
-	return NULL;
-}
-
-/*
- * Stops the frame capture and releases the internal state memory.
- */
-void rpmsg_cam_stop(rpmsg_cam_handle_t handle)
-{
-	struct rpmsg_cam_handle *h = (struct rpmsg_cam_handle *)handle;
-	int ret;
-
-	struct bcam_arm_msg stop_cmd = {
-		.magic_byte.high = BCAM_ARM_MSG_MAGIC >> 8,
-		.magic_byte.low = BCAM_ARM_MSG_MAGIC & 0xff,
-		.id = BCAM_ARM_MSG_CAP_STOP,
-	};
-
-	if (h == NULL)
-		return;
-
-	ret = write(h->rpmsg_fd, &stop_cmd, sizeof(stop_cmd));
-	if (ret < 0) {
-		log_error("Failed to send PRU cap_stop command: %s", strerror(errno));
-		goto fail_write;
-	}
-
-	if (ret != sizeof(stop_cmd))
-		log_error("Failed to send full PRU cap_stop command");
-
-fail_write:
-	close(h->rpmsg_fd);
-	free(h);
-}
 
 /*
  * Reads a PRU cap frame message having the expected sequence number.
@@ -169,16 +91,146 @@ static int rpmsg_cam_read_msg(struct rpmsg_cam_handle *h, int exp_seq,
 }
 
 /*
+ * Utility to send a PRU command.
+ */
+static int rpmsg_cam_send_cmd(struct rpmsg_cam_handle *h, enum bcam_arm_msg_type cmd_id,
+							  void *cmd_data, int cmd_data_len)
+{
+	uint8_t cmd_buf[RPMSG_MESSAGE_SIZE];
+	struct bcam_arm_msg *pru_cmd = (struct bcam_arm_msg *)cmd_buf;
+	int cmd_len, ret;
+
+	if (h == NULL) {
+		log_error("RPMsg camera not initialized, use rpmsg_cam_init()");
+		return -1;
+	}
+
+	pru_cmd->magic_byte.high = BCAM_ARM_MSG_MAGIC >> 8;
+	pru_cmd->magic_byte.low = BCAM_ARM_MSG_MAGIC & 0xff;
+	pru_cmd->id = cmd_id;
+
+	cmd_len = sizeof(struct bcam_arm_msg) + cmd_data_len;
+	if (cmd_data_len > 0)
+		memcpy(pru_cmd->data, cmd_data, cmd_data_len);
+
+	ret = write(h->rpmsg_fd, cmd_buf, cmd_len);
+
+	if (ret < 0) {
+		log_error("Failed to send PRU command (id=%d): %s", cmd_id, strerror(errno));
+		return ret;
+	}
+
+	if (ret != cmd_len) {
+		log_error("Sent incomplete PRU cmd data (id=%d): %d out of %d bytes",
+				  cmd_id, ret, cmd_len);
+		return -1;
+	}
+
+	/* Expecting just a PRU log message */
+	ret = rpmsg_cam_read_msg(h, 0, &cmd_len, (void *)(&pru_cmd));
+	if (ret != 0) {
+		log_error("Unexpected PRU cmd response code: %d", ret);
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * Starts capturing frames via PRU.
+ *
+ * Returns an opaque handle to a dynamically allocated internal state
+ * structure or NULL in case of an error.
+ */
+rpmsg_cam_handle_t rpmsg_cam_init(const char *rpmsg_dev_path, int xres, int yres)
+{
+	struct bcam_cap_config setup_data;
+	struct rpmsg_cam_handle *h;
+	int bpp = 2, ret;
+
+	h = malloc(sizeof(*h));
+	if (h == NULL) {
+		log_fatal("Not enough memory");
+		return NULL;
+	}
+
+	h->rpmsg_fd = open(rpmsg_dev_path, O_RDWR);
+	if (h->rpmsg_fd < 0) {
+		log_error("Failed to open %s: %s", rpmsg_dev_path, strerror(errno));
+		free(h);
+		return NULL;
+	}
+
+	setup_data.xres = xres;
+	setup_data.yres = yres;
+	setup_data.bpp = bpp;
+
+	ret = rpmsg_cam_send_cmd(h, BCAM_ARM_MSG_CAP_SETUP, &setup_data, sizeof(setup_data));
+	if (ret != 0) {
+		rpmsg_cam_release(h);
+		return NULL;
+	}
+
+	h->img_xres = xres;
+	h->img_yres = yres;
+	h->img_bpp = bpp;
+	h->img_sz = xres * yres * bpp;
+	h->frame_cnt = 0;
+
+	return h;
+
+}
+
+/*
+ * Starts capturing frames via PRU.
+ */
+int rpmsg_cam_start(rpmsg_cam_handle_t handle)
+{
+	return rpmsg_cam_send_cmd(handle, BCAM_ARM_MSG_CAP_START, NULL, 0);
+}
+
+/*
+ * Stops the frame capture.
+ */
+int rpmsg_cam_stop(rpmsg_cam_handle_t handle)
+{
+	return rpmsg_cam_send_cmd(handle, BCAM_ARM_MSG_CAP_STOP, NULL, 0);
+}
+
+/*
+ * Releases the internal state memory.
+ */
+int rpmsg_cam_release(rpmsg_cam_handle_t handle)
+{
+	struct rpmsg_cam_handle *h = (struct rpmsg_cam_handle *)handle;
+	int ret;
+
+	if (h == NULL)
+		return 0;
+
+	ret = close(h->rpmsg_fd);
+	if (ret != 0) {
+		log_error("Failed to close RPMsg descriptor: %s", strerror(errno));
+	}
+
+	free(h);
+	return ret;
+}
+
+/*
  * Transfers a full image frame.
+ * Note the caller must set the "handle" frame attribute to point
+ * to the return value of rpmsg_cam_init().
+ *
  * Returns:
  *  0: Successful transfer
  * -1: Read error
  * -2: Frame error
  * -3: Sync error
  */
-int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame)
+int rpmsg_cam_get_frame(struct rpmsg_cam_frame* frame)
 {
-	struct rpmsg_cam_handle *h = (struct rpmsg_cam_handle *)handle;
+	struct rpmsg_cam_handle *h = (struct rpmsg_cam_handle *)(frame->handle);
 	int seq = 0, cnt = 0, ret, data_len;
 	uint8_t *data;
 
@@ -190,13 +242,13 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 
 		switch (ret) {
 		case BCAM_FRM_START:
-			if (data_len > sizeof(frame->data)) {
+			if (data_len > h->img_sz) {
 				log_debug("Received start frame section too large: %d vs. %d bytes",
-						  data_len, sizeof(frame->data));
+						  data_len, h->img_sz);
 				return -2;
 			}
 			log_trace("Received start frame section");
-			memcpy(frame->data, data, data_len);
+			memcpy(frame->pixels, data, data_len);
 			cnt = data_len;
 			seq = 1;
 			break;
@@ -209,9 +261,9 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 			break;
 
 		default:
-			/* Abort when exceeding max frame length */
+			/* Abort when exceeding 2 * image size */
 			cnt += data_len;
-			if (cnt > sizeof(frame->data)) {
+			if (cnt > 2 * h->img_sz) {
 				log_debug("No frame start section within %d bytes received", cnt);
 				return -3;
 			}
@@ -231,9 +283,9 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 			cnt = 0;
 		case BCAM_FRM_BODY:
 		case BCAM_FRM_END:
-			if (cnt + data_len > sizeof(frame->data)) {
+			if (cnt + data_len > h->img_sz) {
 				log_debug("Received frame too large: %d vs. %d bytes",
-						  cnt + data_len, sizeof(frame->data));
+						  cnt + data_len, h->img_sz);
 				return -2;
 			}
 			break;
@@ -247,14 +299,13 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 		}
 
 		/* Copy message data to frame buffer */
-		memcpy(frame->data + cnt, data, data_len);
+		memcpy(frame->pixels + cnt, data, data_len);
 		cnt += data_len;
 		seq++;
 
 		if (ret == BCAM_FRM_END) {
-			if (cnt < sizeof(frame->data)) {
-				log_debug("Received incomplete frame: %d vs. %d bytes",
-						  cnt, sizeof(frame->data));
+			if (cnt < h->img_sz) {
+				log_debug("Received incomplete frame: %d vs. %d bytes", cnt, h->img_sz);
 				return -2;
 			}
 
@@ -267,8 +318,15 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 	return 0;
 }
 
-int rpmsg_cam_dump_frame(const char *file_path, struct rpmsg_cam_frame *frame)
+/*
+ * Utility to write the content of a frame to a file.
+ * Note the caller must set the "handle" frame attribute to point
+ * to the return value of rpmsg_cam_init().
+ */
+int rpmsg_cam_dump_frame(const struct rpmsg_cam_frame *frame,
+						 const char *file_path)
 {
+	struct rpmsg_cam_handle *h = (struct rpmsg_cam_handle *)(frame->handle);
 	FILE *f;
 	int ret;
 
@@ -278,7 +336,7 @@ int rpmsg_cam_dump_frame(const char *file_path, struct rpmsg_cam_frame *frame)
 		return -1;
 	}
 
-	ret = fwrite(frame->data, sizeof(frame->data), 1, f);
+	ret = fwrite(frame->pixels, h->img_sz, 1, f);
 	if (ret != 1) {
 		log_error("Failed to dump frame: %s", strerror(errno));
 		return -1;
