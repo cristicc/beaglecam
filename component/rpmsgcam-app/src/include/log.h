@@ -22,4 +22,6 @@ void log_set_level(int level);
 
 void log_write(int level, const char *file, int line, const char *fmt, ...);
 
+int hexdump(void const *data, size_t length, int linelen, int chunklen);
+
 #endif /* _LOG_H */

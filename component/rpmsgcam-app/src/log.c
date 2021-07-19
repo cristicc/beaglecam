@@ -58,3 +58,98 @@ void log_write(int level, const char *file, int line, const char *fmt, ...) {
 
 	fwrite(msg, chunk - msg, 1, stderr);
 }
+
+/**
+ * Displays the content of a buffer in hexadecimal format.
+ *
+ * @data: buffer to display
+ * @length: length of the buffer
+ * @linelen: number of chars per output line
+ * @chunklen: number of chars per chunk
+ */
+int hexdump(void const *data, size_t length, int linelen, int chunklen)
+{
+	char buffer[512];
+	char *ptr;
+	const void *inptr;
+	int pos;
+	int remaining = length;
+
+	if (log_level < LOG_TRACE)
+		return 0;
+
+	inptr = data;
+
+	/*
+	 * hex/ascii gap (2 chars) + closing \0 (1 char)
+	 * split = 4 chars (2 each for hex/ascii) * number of splits
+	 * (hex = 3 chars, ascii = 1 char) * linelen number of chars
+	 */
+	if (sizeof(buffer) < (3 + (4 * (linelen / chunklen)) + (linelen * 4)))
+		return -1;
+
+	/* Loop through each line remaining */
+	while (remaining > 0) {
+		int lrem;
+		int splitcount;
+		ptr = buffer;
+
+		/* Loop through the hex chars of this line */
+		lrem = remaining;
+		splitcount = 0;
+		for (pos = 0; pos < linelen; pos++) {
+
+			/* Split hex section if required */
+			if (chunklen == splitcount++) {
+				sprintf(ptr, "  ");
+				ptr += 2;
+				splitcount = 1;
+			}
+
+			/* If still remaining chars, output, else leave a space */
+			if (lrem) {
+				sprintf(ptr, "%.2x ", *((unsigned char *) inptr + pos));
+				lrem--;
+			} else {
+				sprintf(ptr, "   ");
+			}
+			ptr += 3;
+		}
+
+		*ptr++ = ' ';
+		*ptr++ = ' ';
+
+		/* Loop through the ASCII chars of this line */
+		lrem = remaining;
+		splitcount = 0;
+		for (pos = 0; pos < linelen; pos++) {
+			unsigned char c;
+
+			/* Split ASCII section if required */
+			if (chunklen == splitcount++) {
+				sprintf(ptr, "  ");
+				ptr += 2;
+				splitcount = 1;
+			}
+
+			if (lrem) {
+				c = *((unsigned char *) inptr + pos);
+				if (c > 31 && c < 127) {
+					sprintf(ptr, "%c", c);
+				} else {
+					sprintf(ptr, ".");
+				}
+				lrem--;
+			}
+			ptr++;
+		}
+
+		*ptr = '\0';
+		fprintf(stderr, "%s\n", buffer);
+
+		inptr += linelen;
+		remaining -= linelen;
+	}
+
+	return 0;
+}
