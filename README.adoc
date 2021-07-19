@@ -605,8 +605,9 @@ $ tools/ssh-cmd.sh -t 10.0.1.100 -u rootfs,kernel
 # After device rebooted, load the required modules and start the PRU cores
 $ tools/ssh-cmd.sh -t 10.0.1.100 'prefix=/sys/class/remoteproc/remoteproc; modprobe -a virtio_rpmsg_bus pru_rproc rpmsg_cam; echo start >${prefix}0/state; echo start >${prefix}1/state;'
 
-# Verify PRU firmware version (see kernel log for command response)
+# Verify PRU firmware version
 $ tools/ssh-cmd.sh -t 10.0.1.100 'printf "%b" "\xbe\xca\x00" >/dev/rpmsgcam31'
+$ root@beaglecam:~# cat /dev/rpmsgcam31
 
 # Trigger data capture by sending the START cmd, followed by STOP
 $ tools/ssh-cmd.sh -t 10.0.1.100 'printf "%b" "\xbe\xca\x02" >/dev/rpmsgcam31; sleep 5; printf "%b" "\xbe\xca\x03" >/dev/rpmsgcam31'

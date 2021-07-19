@@ -41,11 +41,12 @@ struct prog_opts {
 	const char *rpmsg_dev;
 };
 
-/* Return count in ring buffer */
+/* Utility to count elements in the ring buffer. */
 #define CIRC_CNT(head, tail, size) (((head) - (tail)) & ((size) - 1))
 /*
- * Return space available in ring buffer. We always leave one free position as
- * a completely full buffer has head == tail, which is the same as empty.
+ * Utility to get the available space in the ring buffer.
+ * Note there is always one free position as a completely full buffer has
+ * head == tail, which is the same as empty.
  */
 #define CIRC_SPACE(head, tail, size) CIRC_CNT((tail), ((head) + 1), (size))
 
@@ -65,6 +66,9 @@ struct ring_buffer {
 	pthread_mutex_t frame_rdy_lock;
 };
 
+/*
+ * The ring buffer storing frames received from the camera module.
+ */
 static struct ring_buffer frame_ring = {
 	.reader = 0,
 	.writer = 0,
@@ -75,25 +79,54 @@ static struct ring_buffer frame_ring = {
 /* RPMsg camera handle */
 static rpmsg_cam_handle_t cam_handle;
 
+/* Flag for stopping the application gracefully. */
+static volatile sig_atomic_t prog_stopping = 0;
+
+/* Utility to programatically stop the application. */
+static void prog_stop()
+{
+	prog_stopping = 1;
+}
+
+/* Handler for SIGINT. */
+static void signal_handler(int sig, siginfo_t *siginfo, void *arg)
+{
+	prog_stop();
+}
+
+/* Setup SIGINT handler. */
+static int setup_signal_handler()
+{
+	struct sigaction sa;
+	int ret;
+
+    sa.sa_sigaction = &signal_handler;
+    sa.sa_flags = 0;
+
+    ret = sigemptyset(&sa.sa_mask);
+	if (ret != 0) {
+		log_fatal("Failed to initialize signal set: %s", strerror(errno));
+		return ret;
+	}
+
+    ret = sigaction(SIGINT, &sa, NULL);
+	if (ret != 0)
+		log_fatal("Failed to setup signal handler: %s", strerror(errno));
+
+	return ret;
+}
+
 /*
- * Program graceful stop
+ * Handler for frames_acq_thread cleanup.
  */
-static _Atomic int prog_stopping = 0;
-
-void prog_stop()
+static void acquire_frames_cleanup_handler(void *arg)
 {
-	log_info("Stopping rpmsgcam app");
-
-	atomic_store_explicit(&prog_stopping, 1, memory_order_relaxed);
-}
-
-static int is_prog_stopping()
-{
-	return atomic_load_explicit(&prog_stopping, memory_order_relaxed);
+	log_info("Stopping frames acquisition thread");
+	rpmsg_cam_stop(cam_handle);
 }
 
 /*
- * Receive frames from the camera module into the ring buffer.
+ * Receives frames from the camera module into the ring buffer.
  * It acts as a single producer (writer).
  */
 static void *acquire_frames(void *rpmsg_dev)
@@ -101,28 +134,31 @@ static void *acquire_frames(void *rpmsg_dev)
 	int head, tail, ret;
 	static struct rpmsg_cam_frame frame;
 
-	log_info("Starting camera frames acquisition");
+	log_info("Starting frames acquisition thread");
 
 	cam_handle = rpmsg_cam_start((const char *)rpmsg_dev);
 	if (cam_handle == NULL) {
 		log_fatal("Failed to initialize PRU communication");
+		prog_stop();
 		return NULL;
 	}
 
+	pthread_cleanup_push(acquire_frames_cleanup_handler, NULL);
+
 	while (1) {
 		ret = rpmsg_cam_get_frame(cam_handle, &frame);
-
-		if (is_prog_stopping())
-			break;
-
 		if (ret == -1) {
 			log_error("Failed to get frame: %d", ret);
 			prog_stop();
 			break;
 		}
 
-		if (ret < -1)
+		if (ret < -1) {
+			log_debug("Skipping frame due to error: %d", ret);
 			continue; /* Ignore frame & sync errors */
+		}
+
+		log_debug("Received frame: seq=%d", frame.seq);
 
 		head = frame_ring.writer;
 		tail = atomic_load_explicit(&frame_ring.reader, memory_order_relaxed);
@@ -136,43 +172,59 @@ static void *acquire_frames(void *rpmsg_dev)
 								  memory_order_release);
 
 			/* Notify the consumer thread */
-			pthread_cond_signal(&frame_ring.frame_rdy);
-
-			if (is_prog_stopping())
-				break;
+			ret = pthread_cond_signal(&frame_ring.frame_rdy);
+			if (ret != 0)
+				log_debug("pthread_cond_signal failed: %s", strerror(ret));
 		} else {
-			log_debug("Dropped frame");
+			pthread_testcancel(); /* Add cancellation point */
+			log_debug("Ring buffer full, dropping frame");
 		}
 	}
 
-	log_info("Stopping camera frames acquisition");
-	rpmsg_cam_stop(cam_handle);
-
-	/* Wake consumer thread which might be waiting for new frames */
-	pthread_mutex_lock(&frame_ring.frame_rdy_lock);
-	pthread_cond_signal(&frame_ring.frame_rdy);
-	pthread_mutex_unlock(&frame_ring.frame_rdy_lock);
+	/* Calls acquire_frames_cleanup_handler() on normal thread termination */
+	pthread_cleanup_pop(1);
 
 	return NULL;
 }
 
 /*
- * Send frames to the FB as soon as they are ready.
+ * Handler for frames_disp_thread cleanup.
+ */
+static void display_frames_cleanup_handler(void *arg)
+{
+	log_info("Stopping FB display thread");
+	pthread_mutex_unlock(&frame_ring.frame_rdy_lock);
+}
+
+/*
+ * Sends frames to the FB as soon as they are ready.
  * It acts as a single consumer (reader).
  */
 static void *display_frames(void *fb_dev)
 {
-	int head, tail;
+	int head, tail, ret;
+	int fb_dev_valid;
+
+	log_info("Starting FB display thread");
+	fb_dev_valid = (*(const char *)fb_dev != '-');
 
 	/* Initialize FB */
-	if (init_fb((const char *)fb_dev) != 0) {
-		log_fatal("Failed to initialize frame buffer");
+	if (fb_dev_valid)
+		if (init_fb((const char *)fb_dev) != 0) {
+			log_fatal("Failed to initialize frame buffer");
+			prog_stop();
+			return NULL;
+		}
+
+	/* Cond var mutex must be locked before calling pthread_cond_wait() */
+	ret = pthread_mutex_lock(&frame_ring.frame_rdy_lock);
+	if (ret != 0) {
+		log_error("pthread_mutex_lock failed: %s", strerror(ret));
 		prog_stop();
 		return NULL;
 	}
 
-	/* Cond var mutex must be locked before calling pthread_cond_wait() */
-	pthread_mutex_lock(&frame_ring.frame_rdy_lock);
+	pthread_cleanup_push(display_frames_cleanup_handler, NULL);
 
 	while (1) {
 		/* Ensure index is read before content at that index */
@@ -181,33 +233,28 @@ static void *display_frames(void *fb_dev)
 
 		if (CIRC_CNT(head, tail, FRAME_RING_SIZE) >= 1) {
 			/* Render image into the frame buffer */
-			write_fb(frame_ring.buf[tail]->data);
+			if (fb_dev_valid)
+				write_fb(frame_ring.buf[tail]->data);
 
 			/* Finish consuming data before incrementing tail */
 			atomic_store_explicit(&frame_ring.reader, (tail + 1) & (FRAME_RING_SIZE - 1),
 								  memory_order_release);
 		} else {
 			/* Ring buffer empty, wait for new frames */
-			pthread_cond_wait(&frame_ring.frame_rdy, &frame_ring.frame_rdy_lock);
+			ret = pthread_cond_wait(&frame_ring.frame_rdy, &frame_ring.frame_rdy_lock);
+			if (ret != 0)
+				log_debug("pthread_cond_wait failed: %s", strerror(ret));
 		}
-
-		if (is_prog_stopping())
-			break;
 	}
 
-	pthread_mutex_unlock(&frame_ring.frame_rdy_lock);
-
+	/* Calls display_frames_cleanup_handler() on normal thread termination */
+	pthread_cleanup_pop(1);
 	return NULL;
 }
 
 /*
- * Handler for SIGINT for gracefully close the app.
+ * Prints program help text.
  */
-static void handle_signal(int sig)
-{
-	prog_stop();
-}
-
 static void usage(char *prog_name) {
 	fprintf(stderr, PROG_USAGE_FMT "\n", prog_name);
 }
@@ -271,6 +318,11 @@ int main(int argc, char *argv[])
 
 	log_info("Starting rpmsgcam app");
 
+	/* Setup the signal handler for stopping app gracefully */
+    ret = setup_signal_handler();
+	if (ret != 0)
+		goto fail;
+
 	/* Allocate memory for frames circular buffer */
 	for (int i = 0; i < FRAME_RING_SIZE; i++)
 		frame_ring.buf[i] = malloc(sizeof(struct rpmsg_cam_frame));
@@ -282,30 +334,26 @@ int main(int argc, char *argv[])
 			goto fail;
 	}
 
-	/* Setup the signal handler */
-	signal(SIGINT, handle_signal);
-
 	log_info("Creating frame acquisition thread");
 	ret = pthread_create(&frames_acq_thread, NULL, acquire_frames, (void *)options.rpmsg_dev);
 	if (ret != 0) {
-		errno = ret;
-		log_fatal("Failed to create thread: %s", strerror(errno));
+		log_fatal("Failed to create thread: %s", strerror(ret));
 		goto fail;
 	}
 
 	log_info("Creating frame display thread");
 	ret = pthread_create(&frames_disp_thread, NULL, display_frames, (void *)options.fb_dev);
 	if (ret != 0) {
-		errno = ret;
-		log_fatal("Failed to create thread: %s", strerror(errno));
-		prog_stop();
+		log_fatal("Failed to create thread: %s", strerror(ret));
 		pthread_cancel(frames_acq_thread);
 		pthread_join(frames_acq_thread, NULL);
 		goto fail;
 	}
 
-	while (!is_prog_stopping())
+	while (prog_stopping == 0)
 		sleep(1);
+
+	log_info("Stopping rpmsgcam app");
 
 	pthread_cancel(frames_acq_thread);
 	pthread_cancel(frames_disp_thread);
