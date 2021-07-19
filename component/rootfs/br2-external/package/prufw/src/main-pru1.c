@@ -139,6 +139,13 @@ void init_pru_core()
 	CT_INTC.SECR0 = 0xFFFFFFFF;
 	CT_INTC.SECR1 = 0xFFFFFFFF;
 
+	/* Set default frame acquisition configuration */
+	smem->cap_config.xres = 160;
+	smem->cap_config.yres = 120;
+	smem->cap_config.bpp = 2;
+	smem->cap_config.img_sz = smem->cap_config.xres * smem->cap_config.yres * smem->cap_config.bpp;
+	smem->cap_config.test_mode = 1;
+
 	/* 3 Hz LED blink for 2 seconds */
 	for (blinks = 0; blinks < 6; blinks++) {
 		BLINK_LED(PIN_LED, 30);
