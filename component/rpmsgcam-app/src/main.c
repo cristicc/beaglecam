@@ -118,7 +118,7 @@ static void prog_stop()
 }
 
 /* Handler for SIGINT. */
-static void signal_handler(int sig, siginfo_t *siginfo, void *arg)
+static void signal_handler(int sig)
 {
 	prog_stop();
 }
@@ -129,18 +129,18 @@ static int setup_signal_handler()
 	struct sigaction sa;
 	int ret;
 
-    sa.sa_sigaction = &signal_handler;
-    sa.sa_flags = 0;
+	sa.sa_handler = &signal_handler;
+	sa.sa_flags = SA_RESTART; /* Restart functions if interrupted by handler */
 
-    ret = sigemptyset(&sa.sa_mask);
+	ret = sigemptyset(&sa.sa_mask);
 	if (ret != 0) {
-		log_fatal("Failed to initialize signal set: %s", strerror(errno));
+		log_error("Failed to initialize signal set: %s", strerror(errno));
 		return ret;
 	}
 
     ret = sigaction(SIGINT, &sa, NULL);
 	if (ret != 0)
-		log_fatal("Failed to setup signal handler: %s", strerror(errno));
+		log_error("Failed to setup signal handler: %s", strerror(errno));
 
 	return ret;
 }
@@ -409,9 +409,7 @@ int main(int argc, char *argv[])
 	log_info("Starting rpmsgcam app");
 
 	/* Setup the signal handler for stopping app gracefully */
-    ret = setup_signal_handler();
-	if (ret != 0)
-		exit(EXIT_FAILURE);
+    setup_signal_handler();
 
 	/* Configure the OV7670 Camera Module via the I2C-like interface */
 	if (options.cam_dev[0] != '-') {
