@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <time.h>
 
 #include "log.h"
@@ -30,16 +31,20 @@ void log_set_level(int level) {
 }
 
 void log_write(int level, const char *file, int line, const char *fmt, ...) {
+	char msg[LOG_LINE_MAX_LEN];
+	struct timeval tval;
+	struct tm *tm;
+	va_list args;
+	char *chunk;
+
 	if (level > log_level)
 		return;
 
-	va_list args;
-	char msg[LOG_LINE_MAX_LEN];
-	char *chunk;
-	time_t t = time(NULL);
-	struct tm *lt = localtime(&t);
+	gettimeofday(&tval, NULL);
+	tm = localtime(&tval.tv_sec);
 
-	chunk = msg + strftime(msg, 24, "%Y-%m-%d %H:%M:%S", lt);
+	chunk = msg + strftime(msg, 24, "%Y-%m-%d %H:%M:%S", tm);
+	chunk += snprintf(chunk, 5, ".%03d", (int)(tval.tv_usec / 1000));
 
 #ifdef LOG_USE_COLOR
 	chunk += snprintf(chunk, LOG_LINE_MAX_LEN / 2 - (chunk - msg),
