@@ -9,13 +9,14 @@
 #include "fb.h"
 #include "log.h"
 
-static int fbfd = 0;
-static struct fb_var_screeninfo vinfo;
+/* TODO: typedef void *fb_handle_t; */
 static struct fb_fix_screeninfo finfo;
+static struct fb_var_screeninfo vinfo;
+static int fbfd = -1;
 static char *fbp = 0;
 
 /*
- * Initialize frame buffer
+ * Initialize frame buffer.
  */
 int init_fb(const char *dev_path)
 {
@@ -42,19 +43,24 @@ int init_fb(const char *dev_path)
 		goto fail;
 	}
 
-	log_info("FB: %dx%d, %dbpp, length %d, offsets: %d %d",
-			 vinfo.xres, vinfo.yres,
-			 vinfo.bits_per_pixel, finfo.line_length,
+	log_info("FB screen info: %dx%d, %dbpp, xoff=%d, yoff=%d",
+			 vinfo.xres, vinfo.yres, vinfo.bits_per_pixel,
 			 vinfo.xoffset, vinfo.yoffset);
 
 	/* Compute the screen size (bytes) */
 	screen_size = vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8;
 
+	if (vinfo.bits_per_pixel != 16) {
+		log_error("Expected 16 bpp, but found: %s", vinfo.bits_per_pixel);
+		ret = -1;
+		goto fail;
+	}
+
 	/* Map device to memory */
 	fbp = (char *)mmap(0, screen_size, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
 	if (fbp == MAP_FAILED) {
-		ret = -1;
 		log_error("Failed to map FB device to memory: %s", strerror(errno));
+		ret = -1;
 		goto fail;
 	}
 
@@ -62,33 +68,35 @@ int init_fb(const char *dev_path)
 
 fail:
 	close(fbfd);
+	fbfd = -1;
 	return ret;
 }
 
+/*
+ * Write RGB565 pixel data into the frame buffer.
+ * TODO: provide source image size and scale to FB screen size
+ */
+void write_fb(uint16_t *rgb565)
+{
+	int x, y;
+
+	if (fbfd < 0)
+		return;
+
+	for (y = 0; y < 120; y++)
+		for (x = 0; x < 160; x++)
+			*((uint16_t *)(fbp + y * finfo.line_length + x * 2)) = rgb565[y * 160 + x];
+}
 
 /*
- * Write pixel data into the frame buffer.
+ * Release frame buffer resources.
  */
-void write_fb(uint8_t *pixels)
+void release_fb()
 {
-	uint8_t* bP;
-	int x, y, offset;
+	if (fbfd < 0)
+		return;
 
-	for (y = 0; y < 240; y = y + 2) {
-		/* Line 1 */
-		bP = pixels + y / 2 *160;
-		for (x = 0; x < 320; x += 2) {
-			offset = (x * 2) + (y * finfo.line_length);
-			*((uint16_t*)(fbp + offset)) = *(uint16_t*)bP;
-			*((uint16_t*)(fbp + offset + 2)) = *(uint16_t*)bP;
-		}
-
-		/* Line 2 */
-		bP = pixels + y / 2 * 160;
-		for (x = 0; x < 320; x += 2) {
-			offset = (x * 2) + ((y + 1) * finfo.line_length);
-			*((uint16_t*)(fbp + offset)) = *(uint16_t*)bP;
-			*((uint16_t*)(fbp + offset + 2)) = *(uint16_t*)bP;
-		}
-	}
+	munmap(fbp, vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8);
+	close(fbfd);
+	fbfd = -1;
 }
