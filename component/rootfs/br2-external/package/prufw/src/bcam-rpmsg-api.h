@@ -22,7 +22,14 @@ struct bcam_arm_msg {
 		} magic_byte;
 	};
 	uint8_t id;			/* Member of enum bcam_arm_msg_type */
-	uint8_t data[0];		/* Message data (currently not used) */
+	uint8_t data[0];		/* Message data */
+} __attribute__((packed));
+
+/* Payload for BCAM_ARM_MSG_CAP_SETUP command. */
+struct bcam_cap_config {
+	uint16_t xres;			/* Image X resolution */
+	uint16_t yres;			/* Image Y resolution */
+	uint8_t bpp;			/* Bits per pixel */
 } __attribute__((packed));
 
 /* Messages sent from PRU1 to ARM. */
@@ -54,6 +61,7 @@ struct bcam_pru_msg {
 enum bcam_arm_msg_type {
 	BCAM_ARM_MSG_GET_PRUFW_VER = 0,		/* Get PRU firmware version */
 	BCAM_ARM_MSG_GET_CAP_STATUS,		/* Get camera capture status */
+	BCAM_ARM_MSG_CAP_SETUP,			/* Setup camera capture */
 	BCAM_ARM_MSG_CAP_START,			/* Start camera data capture */
 	BCAM_ARM_MSG_CAP_STOP,			/* Stop camera data capture */
 };

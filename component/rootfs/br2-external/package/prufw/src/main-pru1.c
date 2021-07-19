@@ -65,7 +65,7 @@ volatile struct shared_mem *smem = (struct shared_mem *)SHARED_MEM_ADDR;
 
 /*
  * Standard structure copied from pru_rpmsg.c.
- * Currently used to implement pru_rpmsg_send_optim().
+ * Currently used to implement rpmsg_send_cap().
  */
 struct pru_rpmsg_hdr {
 	uint32_t	src;
@@ -372,6 +372,17 @@ void main(void)
 					rpmsg_send_info(&transport, rpmsg_dst, rpmsg_src, arm_cmd);
 					break;
 
+				case BCAM_ARM_MSG_CAP_SETUP:
+					smem->cap_config.xres = ((struct bcam_cap_config *)arm_cmd->data)->xres;
+					smem->cap_config.yres = ((struct bcam_cap_config *)arm_cmd->data)->yres;
+					smem->cap_config.bpp = ((struct bcam_cap_config *)arm_cmd->data)->bpp;
+					smem->cap_config.img_sz = smem->cap_config.xres * smem->cap_config.yres * smem->cap_config.bpp;
+					smem->cap_config.test_mode = 1;
+
+					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+						       BCAM_PRU_LOG_INFO, "Capture configured");
+					break;
+
 				case BCAM_ARM_MSG_CAP_START:
 					start_stop_capture(1);
 
@@ -443,19 +454,16 @@ void main(void)
 
 		crt_frame_data_len += capture_buf.len;
 
-		if (crt_frame_data_len >= 38400) { /* QQVGA RGB565 */
-			start_stop_capture(0);
-
+		if (crt_frame_data_len >= smem->cap_config.img_sz) {
 			capture_buf.seq = BCAM_FRM_END;
-			/* Drop any extra bytes read by PRU0 */
-			capture_buf.len -= crt_frame_data_len - 38400;
+			/* Discard any extra captured data */
+			capture_buf.len -= crt_frame_data_len - smem->cap_config.img_sz;
 			/* Force sending completed frame */
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
 
 			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_DEBUG,
 				       "Frame completed, capture stopped");
 		} else {
-			/* Optimized capture data transfer */
 			capture_buf.seq = (exp_cap_seq > 1 ? BCAM_FRM_BODY : BCAM_FRM_START);
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 0);
 			exp_cap_seq++;

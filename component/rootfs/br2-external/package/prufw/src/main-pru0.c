@@ -2,12 +2,8 @@
  * BeagleCam firmware for PRU0.
  *
  * Reads raw data from the camera module and transfered it to PRU1 via the 3
- * scratch pad banks.
- *
- * Although the camera supports 1 Mpixel frames, for the moment we are capturing
- * at the lowest resolution QQVGA (160 x 120 pixels). Each pixel is in RGB 565
- * format, which means that 16 bits (2 bytes) are used per pixel. Hence, each
- * frame requires 38400 bytes.
+ * scratch pad banks. The data is in RGB565 format, which means that 16 bits
+ * (2 bytes) are used per pixel.
  *
  * The start of each frame is signalled by VSYNC going low while the first line
  * of data appears when HREF goes high. Since from PRU0 we can only access data
@@ -70,6 +66,53 @@ uint8_t check_pru1_cmd() {
 }
 
 /*
+ * Generates test RGB565 pixels stored in BGR (little endian) format.
+ *
+ * Returns 1 if PRU_CMD_CAP_STOP interrupted the data generation process,
+ * otherwise 0.
+ */
+uint8_t generate_test_data(struct cap_data *buf)
+{
+	uint32_t img_part_size = smem->cap_config.img_sz / 3;
+	uint32_t img_part_off = buf->seq++ * sizeof(buf->data);
+	uint8_t iter = 0, ret = 0;
+
+	while (iter < sizeof(buf->data)) {
+		if (img_part_off < img_part_size) {
+			/* RED */
+			buf->data[iter++] = 0x00;
+			buf->data[iter++] = 0xf8;
+		} else if (img_part_off < 2 * img_part_size) {
+			/* GREEN */
+			buf->data[iter++] = 0xe0;
+			buf->data[iter++] = 0x07;
+		} else {
+			/* BLUE */
+			buf->data[iter++] = 0x1f;
+			buf->data[iter++] = 0x00;
+		}
+
+		/*
+		 * Simulate 1 MHz PCLK. Note the delay is doubled because we need
+		 * 2 PCLK ticks, one for each of the 2 generated data bytes above.
+		 */
+		__delay_cycles(2 * 200);
+
+		/* Process command from PRU1 */
+		if (check_pru1_cmd() == PRU_CMD_CAP_STOP) {
+			ret = 1;
+			break;
+		}
+
+		img_part_off += 2;
+	}
+
+	buf->len = iter;
+
+	return ret;
+}
+
+/*
  * Main loop.
  */
 void main(void)
@@ -77,7 +120,6 @@ void main(void)
 	struct cap_data buf;
 	uint8_t capture_started = 0;
 	uint8_t crt_bank;
-	uint8_t iter;
 
 	/* Clear the status of all interrupts */
 	CT_INTC.SECR0 = 0xFFFFFFFF;
@@ -101,33 +143,12 @@ void main(void)
 		if (capture_started == 0)
 			continue;
 
-		/* Test only */
-		buf.seq++;
-		iter = 0;
-		while (iter < sizeof(buf.data)) {
-			if (buf.seq < 400) {
-				/* RGB565 RED */
-				buf.data[iter++] = 0xf8;
-				buf.data[iter++] = 0x00;
-			} else if (buf.seq < 800) {
-				/* RGB565 GREEN */
-				buf.data[iter++] = 0x07;
-				buf.data[iter++] = 0xe0;
-			} else {
-				/* RGB565 BLUE */
-				buf.data[iter++] = 0x00;
-				buf.data[iter++] = 0x1f;
-			}
-
-			__delay_cycles(200);
-
-			/* Process command from PRU1 */
-			if (check_pru1_cmd() == PRU_CMD_CAP_STOP) {
+		if (smem->cap_config.test_mode != 0) {
+			if (generate_test_data(&buf) != 0)
 				capture_started = 0;
-				break;
-			}
+		} else {
+			//TODO: get data from camera module
 		}
-		buf.len = iter;
 
 		/*
 		 * Store captured data in the current scratch pad bank. Note the

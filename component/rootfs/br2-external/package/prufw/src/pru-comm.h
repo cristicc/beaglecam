@@ -7,7 +7,7 @@
 #ifndef _PRU_COMM_H
 #define _PRU_COMM_H
 
-#define PRU_FW_VERSION			"0.0.2"
+#define PRU_FW_VERSION			"0.0.3"
 
 /*
  * Inter-PRU signalling.
@@ -31,7 +31,14 @@ struct pru_cmd {
 struct shared_mem {
 	struct pru_cmd pru0_cmd;	/* Command sent from PRU1 to PRU0 */
 	struct pru_cmd pru1_cmd;	/* Command sent from PRU0 to PRU1 */
-	uint8_t data[0];		/* Currently not used */
+
+	struct {
+		uint16_t xres;		/* Image X resolution */
+		uint16_t yres;		/* Image Y resolution */
+		uint8_t bpp;		/* Bits per pixel */
+		uint8_t test_mode;	/* Enable test image generation */
+		uint32_t img_sz;	/* xres * yres * bpp */
+	} cap_config;
 };
 
 /* Local address of the PRU shared RAM */
