@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -261,6 +262,32 @@ int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame
 			frame->seq = h->frame_cnt++;
 			break;
 		}
+	}
+
+	return 0;
+}
+
+int rpmsg_cam_dump_frame(const char *file_path, struct rpmsg_cam_frame *frame)
+{
+	FILE *f;
+	int ret;
+
+	f = fopen(file_path, "w");
+	if (f == NULL) {
+		log_error("Failed to open %s: %s", file_path, strerror(errno));
+		return -1;
+	}
+
+	ret = fwrite(frame->data, sizeof(frame->data), 1, f);
+	if (ret != 1) {
+		log_error("Failed to dump frame: %s", strerror(errno));
+		return -1;
+	}
+
+	ret = fclose(f);
+	if (ret != 0) {
+		log_error("Failed to close %s: %s", file_path, strerror(errno));
+		return ret;
 	}
 
 	return 0;

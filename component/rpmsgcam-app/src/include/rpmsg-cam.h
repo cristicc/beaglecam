@@ -21,5 +21,6 @@ typedef void *rpmsg_cam_handle_t;
 rpmsg_cam_handle_t rpmsg_cam_start(const char *rpmsg_dev_path);
 void rpmsg_cam_stop(rpmsg_cam_handle_t handle);
 int rpmsg_cam_get_frame(rpmsg_cam_handle_t handle, struct rpmsg_cam_frame* frame);
+int rpmsg_cam_dump_frame(const char *file_path, struct rpmsg_cam_frame *frame);
 
 #endif /* _RPMSG_CAP_H */
