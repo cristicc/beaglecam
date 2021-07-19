@@ -105,8 +105,19 @@ void main(void)
 		buf.seq++;
 		iter = 0;
 		while (iter < sizeof(buf.data)) {
-			buf.data[iter] = ((iter & 1) ? 0xab : 0xef);
-			iter++;
+			if (buf.seq < 400) {
+				/* RGB565 RED */
+				buf.data[iter++] = 0xf8;
+				buf.data[iter++] = 0x00;
+			} else if (buf.seq < 800) {
+				/* RGB565 GREEN */
+				buf.data[iter++] = 0x07;
+				buf.data[iter++] = 0xe0;
+			} else {
+				/* RGB565 BLUE */
+				buf.data[iter++] = 0x00;
+				buf.data[iter++] = 0x1f;
+			}
 
 			__delay_cycles(200);
 
@@ -116,7 +127,6 @@ void main(void)
 				break;
 			}
 		}
-		*(uint16_t *)buf.data = buf.seq;
 		buf.len = iter;
 
 		/*

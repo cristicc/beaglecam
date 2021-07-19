@@ -7,7 +7,7 @@
 #ifndef _PRU_COMM_H
 #define _PRU_COMM_H
 
-#define PRU_FW_VERSION			"0.0.16"
+#define PRU_FW_VERSION			"0.0.2"
 
 /*
  * Inter-PRU signalling.

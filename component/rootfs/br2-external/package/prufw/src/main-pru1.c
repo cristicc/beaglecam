@@ -260,26 +260,21 @@ int16_t rpmsg_send_cap(
 
 	/* Transfer optimization data */
 	static uint16_t			cached_len = 0;
+	static uint16_t			bseq = 0;
 	struct bcam_pru_msg		*bmsg;
-	uint16_t			bseq;
 	int16_t				ret;
 
 	if (cap != NULL) {
-		/* Reset sequence by default */
-		bseq = 0;
-
 		if (cached_len > 0) {
 			bmsg = (struct bcam_pru_msg *)msg->data;
-			/* Increment last sequence if frm section didn't change */
-			if (cap->seq == bmsg->cap_hdr.frm)
-				bseq = bmsg->cap_hdr.seq + 1;
 
 			/*
 			 * Force transferring cached frame if its section
 			 * changed or there is no room to append new content.
-			 * Note cap->seq provides frame section (see main loop).
+			 * Note cap->seq provides frame section type (see main loop).
 			 */
-			if (bseq == 0 || cached_len + cap->len > RPMSG_MESSAGE_SIZE) {
+			if (cap->seq != bmsg->cap_hdr.frm ||
+					cached_len + cap->len > RPMSG_MESSAGE_SIZE) {
 				ret = rpmsg_send_cap(transport, src, dst, NULL, 1);
 				if (ret != PRU_RPMSG_SUCCESS)
 					return ret;
@@ -297,7 +292,10 @@ int16_t rpmsg_send_cap(
 			bmsg = (struct bcam_pru_msg *)msg->data;
 			bmsg->type = BCAM_PRU_MSG_CAP;
 			bmsg->cap_hdr.frm = cap->seq;
-			bmsg->cap_hdr.seq = bseq;
+
+			if (cap->seq == BCAM_FRM_START)
+				bseq = 0; /* Reset frame part seq for each new frame */
+			bmsg->cap_hdr.seq = bseq++;
 
 			cached_len = sizeof(bmsg->type) + sizeof(bmsg->cap_hdr);
 		}
@@ -340,6 +338,7 @@ void main(void)
 	uint16_t arm_cmd_len;
 
 	struct cap_data capture_buf;
+	uint32_t crt_frame_data_len;
 	uint16_t exp_cap_seq;
 	uint8_t crt_bank;
 
@@ -360,10 +359,10 @@ void main(void)
 			 */
 			while (pru_rpmsg_receive(&transport, &rpmsg_src, &rpmsg_dst,
 						 arm_recv_buf, &arm_cmd_len) == PRU_RPMSG_SUCCESS) {
-				if (arm_cmd_len < sizeof(*arm_cmd) || (arm_cmd->magic[0] << 8
-						| arm_cmd->magic[1]) != BCAM_ARM_MSG_MAGIC) {
+				if (arm_cmd_len < sizeof(*arm_cmd) || (arm_cmd->magic_byte.high << 8
+						| arm_cmd->magic_byte.low) != BCAM_ARM_MSG_MAGIC) {
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_PRU_LOG_DEBUG, "malformed cmd");
+						       BCAM_PRU_LOG_DEBUG, "Malformed cmd");
 					continue;
 				}
 
@@ -376,23 +375,24 @@ void main(void)
 				case BCAM_ARM_MSG_CAP_START:
 					start_stop_capture(1);
 
-					crt_bank = 0;
+					crt_frame_data_len = 0;
 					exp_cap_seq = 1;
+					crt_bank = 0;
 
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_PRU_LOG_INFO, "capture started");
+						       BCAM_PRU_LOG_INFO, "Capture started");
 					break;
 
 				case BCAM_ARM_MSG_CAP_STOP:
 					start_stop_capture(0);
 
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_PRU_LOG_INFO, "capture stopped");
+						       BCAM_PRU_LOG_INFO, "Capture stopped");
 					break;
 
 				default:
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_PRU_LOG_WARN, "unknown cmd");
+						       BCAM_PRU_LOG_WARN, "Unknown cmd");
 				}
 			}
 		}
@@ -437,19 +437,23 @@ void main(void)
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
 
 			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_ERROR,
-				       "unexpected cap seq");
+				       "Unexpected cap seq");
 			continue;
 		}
 
-		if (exp_cap_seq > 40) {
+		crt_frame_data_len += capture_buf.len;
+
+		if (crt_frame_data_len >= 38400) { /* QQVGA RGB565 */
 			start_stop_capture(0);
 
-			/* Flush cached data */
 			capture_buf.seq = BCAM_FRM_END;
+			/* Drop any extra bytes read by PRU0 */
+			capture_buf.len -= crt_frame_data_len - 38400;
+			/* Force sending completed frame */
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
 
-			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_INFO,
-				       "limit reached, capture stopped");
+			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_DEBUG,
+				       "Frame completed, capture stopped");
 		} else {
 			/* Optimized capture data transfer */
 			capture_buf.seq = (exp_cap_seq > 1 ? BCAM_FRM_BODY : BCAM_FRM_START);
