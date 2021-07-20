@@ -1,9 +1,12 @@
 /*
- * I2C utilities.
+ * General I2C utilities.
  *
  * Based on i2cfunc.c from shabaz's iobb library:
  * https://github.com/shabaz123/iobb
  */
+
+#ifndef _I2CFUNC_H
+#define _I2CFUNC_H
 
 /**
  * Gets an I2C file descriptor.
@@ -45,3 +48,5 @@ int i2c_close(int handle);
  * The maximum delay is 999msec.
  */
 int delay_ms(unsigned int msec);
+
+#endif /* _I2CFUNC_H */

@@ -5,6 +5,9 @@
  * for OmniVision OV7670 cameras: drivers/media/i2c/ov7670.c
  */
 
+#ifndef _OV7670_REGS_H
+#define _OV7670_REGS_H
+
 #define OV7670_I2C_ADDR 0x42
 
 #define PLL_FACTOR	4
@@ -155,3 +158,5 @@
 #define REG_HAECC6	0xa9	/* Hist AEC/AGC control 6 */
 #define REG_HAECC7	0xaa	/* Hist AEC/AGC control 7 */
 #define REG_BD60MAX	0xab	/* 60hz banding step limit */
+
+#endif /* _OV7670_REGS_H */

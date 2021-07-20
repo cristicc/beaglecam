@@ -15,7 +15,6 @@
 #include "fb.h"
 #include "log.h"
 
-/* TODO: typedef void *fb_handle_t; */
 static struct fb_fix_screeninfo finfo;
 static struct fb_var_screeninfo vinfo;
 static uint32_t screen_size;

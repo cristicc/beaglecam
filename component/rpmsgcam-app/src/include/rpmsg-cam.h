@@ -1,11 +1,11 @@
 /*
- * Capture image frames from the camera module via the RPMsg bus.
+ * Utility to read camera frames via the RPMsg bus.
  *
  * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
-#ifndef _RPMSG_CAP_H
-#define _RPMSG_CAP_H
+#ifndef _RPMSG_CAM_H
+#define _RPMSG_CAM_H
 
 #include <stdint.h>
 
@@ -26,4 +26,4 @@ int rpmsg_cam_release(rpmsg_cam_handle_t handle);
 int rpmsg_cam_get_frame(struct rpmsg_cam_frame* frame);
 int rpmsg_cam_dump_frame(const struct rpmsg_cam_frame *frame, const char *file_path);
 
-#endif /* _RPMSG_CAP_H */
+#endif /* _RPMSG_CAM_H */

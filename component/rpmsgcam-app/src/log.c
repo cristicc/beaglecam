@@ -29,14 +29,16 @@ static const char *log_level_colors[] = {
 /*
  * Change current log level.
  */
-void log_set_level(int level) {
+void log_set_level(int level)
+{
 	log_level = level;
 }
 
 /*
  * Writes a new log message to the console.
  */
-void log_write(int level, const char *file, int line, const char *fmt, ...) {
+void log_write(int level, const char *file, int line, const char *fmt, ...)
+{
 	char msg[LOG_LINE_MAX_LEN];
 	struct timeval tval;
 	struct tm *tm;

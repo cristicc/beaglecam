@@ -1,5 +1,5 @@
 /*
- * I2C utilities.
+ * General I2C utilities.
  *
  * Based on v3.1 of i2cfunc.c from shabaz's iobb library:
  * https://github.com/shabaz123/iobb
