@@ -143,8 +143,6 @@ void main(void)
 		if (capture_started == 0)
 			continue;
 
-		buf.seq++;
-
 		if (smem->cap_config.test_mode != 0) {
 			if (generate_test_data(&buf) != 0) {
 				capture_started = 0;
@@ -153,6 +151,8 @@ void main(void)
 		} else {
 			//TODO: get data from camera module
 		}
+
+		buf.seq++;
 
 		/*
 		 * Store captured data in the current scratch pad bank. Note the
