@@ -2,6 +2,8 @@
  * Acquire image frames from the camera module via the RPMsg bus and render
  * the content on LCD via Linux Frame Buffer.
  *
+ * Additionally, signal the receiving of the first frame via GPIO.
+ *
  * Using the Linux kernel circular buffer concept [1] to pass frame data from
  * the reader thread to the writer thread responsible for displaying images.
  *
@@ -26,34 +28,39 @@
 #include "rpmsg-cam.h"
 
 /* Standard string conversion macros */
-#define STR_HELPER(x)		#x
-#define STR(x)				STR_HELPER(x)
+#define STR_HELPER(x)			#x
+#define STR(x)					STR_HELPER(x)
 
 /* Default camera resolution (QQVGA) */
-#define DEFAULT_CAM_XRES	160
-#define DEFAULT_CAM_YRES	120
+#define DEFAULT_CAM_XRES		160
+#define DEFAULT_CAM_YRES		120
 
-/* Default Linux device paths */
-#define DEFAULT_CAM_DEV		"/dev/i2c-1"	/* I2C2 on BeagleBone Black */
-#define DEFAULT_FB_DEV		"/dev/fb0"
-#define DEFAULT_RPMSG_DEV	"/dev/rpmsgcam31"
+/* Default device paths */
+#define DEFAULT_CAM_DEV			"/dev/i2c-1"	/* I2C2 on BeagleBone Black */
+#define DEFAULT_FB_DEV			"/dev/fb0"
+#define DEFAULT_RPMSG_DEV		"/dev/rpmsgcam31"
+#define DEFAULT_GPIOCHIP_DEV	"/dev/gpiochip3"
+#define DEFAULT_GPIOLINE_LABEL	"P9_13"
 
 /* Program options */
-#define PROG_OPT_STR		"l:x:y:m:c:f:r:s:h"
+#define PROG_OPT_STR			"l:x:y:m:c:f:r:g:s:h"
 
 #define PROG_TRIVIAL_USAGE \
 	"[-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-m MAX_FRAMES]\n" \
 	"		[-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
 
 #define PROG_FULL_USAGE "Options:" \
-	"\n -l LOG_LEVEL	Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)" \
-	"\n -x CAM_XRES	Camera X resolution (default "STR(DEFAULT_CAM_XRES)")" \
-	"\n -y CAM_YRES	Camera Y resolution (default "STR(DEFAULT_CAM_YRES)")" \
-	"\n -m MAX_FRAMES	Exit after receiving the indicated no. of frames" \
-	"\n -c CAM_DEV	Camera I2C device path (default "DEFAULT_CAM_DEV")" \
-	"\n -f FB_DEV	LCD display Frame Buffer device path (default "DEFAULT_FB_DEV")" \
-	"\n -r RPMSG_DEV	RPMsg device path (default "DEFAULT_RPMSG_DEV")" \
-	"\n -s DUMP_FILE	File path to save the first captured image frame" \
+	"\n -l LOG_LEVEL      Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)" \
+	"\n -x CAM_XRES       Camera X resolution (default "STR(DEFAULT_CAM_XRES)")" \
+	"\n -y CAM_YRES       Camera Y resolution (default "STR(DEFAULT_CAM_YRES)")" \
+	"\n -m MAX_FRAMES     Exit app after receiving the indicated no. of frames" \
+	"\n -c CAM_DEV        Camera I2C device path (default "DEFAULT_CAM_DEV")" \
+	"\n -f FB_DEV         LCD display Frame Buffer device path (default "DEFAULT_FB_DEV")" \
+	"\n -r RPMSG_DEV      RPMsg device path (default "DEFAULT_RPMSG_DEV")" \
+	"\n -g GPIOCHIP_DEV   GPIO chip device path (default "DEFAULT_GPIOCHIP_DEV")" \
+	"\n -o GPIOLINE_LABEL Label of the GPIO line to signal the receiving"\
+	"\n                   of the first frame (default "DEFAULT_GPIOLINE_LABEL")" \
+	"\n -s DUMP_FILE      File path to save the raw content of the first frame" \
 
 struct prog_opts {
 	int log_level;
@@ -63,6 +70,8 @@ struct prog_opts {
 	const char *cam_dev;
 	const char *fb_dev;
 	const char *rpmsg_dev;
+	const char *gpiochip_dev;
+	const char *gpioline_label;
 	const char *dump_file;
 };
 
@@ -250,14 +259,27 @@ static void *display_frames(void *pg_opts)
 {
 	struct prog_opts *opts = (struct prog_opts *)pg_opts;
 	struct frame_disp_stats frame_stats;
+	int gpioline_fd = -1;
 	int head, tail, ret;
 
 	log_info("Starting FB display thread");
+
+	frame_stats.start_time = log_get_time_usec();
+	frame_stats.total_frames = 0;
 
 	fb_clear();
 	if (opts->max_frames == 0) {
 		prog_stop();
 		return NULL;
+	}
+
+	/* Initialize GPIO output line */
+	if ((opts->gpiochip_dev[0] != 0) && (opts->gpioline_label[0] != 0)) {
+		log_info("Initializing GPIO output line: %s", opts->gpioline_label);
+
+		gpioline_fd = gpioutil_line_request_output(opts->gpiochip_dev, opts->gpioline_label);
+		if (gpioline_fd < 0)
+			log_warn("Failed to initialize GPIO output line");
 	}
 
 	/* Cond var mutex must be locked before calling pthread_cond_wait() */
@@ -267,9 +289,6 @@ static void *display_frames(void *pg_opts)
 		prog_stop();
 		return NULL;
 	}
-
-	frame_stats.start_time = log_get_time_usec();
-	frame_stats.total_frames = 0;
 
 	pthread_cleanup_push(display_frames_cleanup_handler, &frame_stats);
 
@@ -283,10 +302,19 @@ static void *display_frames(void *pg_opts)
 			fb_write((uint16_t *)frame_ring.buf[tail]->pixels, opts->cam_xres, opts->cam_yres);
 			frame_stats.total_frames++;
 
-			if ((frame_ring.buf[tail]->seq == 0) && (opts->dump_file[0] != 0)) {
-				ret = rpmsg_cam_dump_frame(frame_ring.buf[tail], opts->dump_file);
-				if (ret == 0)
-					log_info("Dumped frame to file: %s", opts->dump_file);
+			/* Special handling for 1st frame */
+			if (frame_ring.buf[tail]->seq == 0) {
+				if (gpioline_fd >= 0) {
+					gpioutil_line_set_value(gpioline_fd, 1);
+					close(gpioline_fd);
+					gpioline_fd = -1;
+				}
+
+				if (opts->dump_file[0] != 0) {
+					ret = rpmsg_cam_dump_frame(frame_ring.buf[tail], opts->dump_file);
+					if (ret == 0)
+						log_info("Dumped frame to file: %s", opts->dump_file);
+				}
 			}
 
 			if ((opts->max_frames > 0) && (frame_ring.buf[tail]->seq + 1 >= opts->max_frames)) {
@@ -307,15 +335,19 @@ static void *display_frames(void *pg_opts)
 
 	/* Calls display_frames_cleanup_handler() on normal thread termination */
 	pthread_cleanup_pop(1);
-	prog_stop();
 
+	if (gpioline_fd >= 0)
+		close(gpioline_fd);
+
+	prog_stop();
 	return NULL;
 }
 
 /*
  * Prints program help text.
  */
-static void usage(char *prog_name, int full) {
+static void usage(char *prog_name, int full)
+{
 	fprintf(stderr, "Usage: %s "PROG_TRIVIAL_USAGE"\n", prog_name);
 
 	if (full)
@@ -339,6 +371,8 @@ int main(int argc, char *argv[])
 		.cam_dev = DEFAULT_CAM_DEV,
 		.fb_dev = DEFAULT_FB_DEV,
 		.rpmsg_dev = DEFAULT_RPMSG_DEV,
+		.gpiochip_dev = DEFAULT_GPIOCHIP_DEV,
+		.gpioline_label = DEFAULT_GPIOLINE_LABEL,
 		.dump_file = "",
 	};
 
@@ -382,6 +416,14 @@ int main(int argc, char *argv[])
 
 		case 'r':
 			options.rpmsg_dev = optarg;
+			break;
+
+		case 'g':
+			options.gpiochip_dev = optarg;
+			break;
+
+		case 'o':
+			options.gpioline_label = optarg;
 			break;
 
 		case 's':

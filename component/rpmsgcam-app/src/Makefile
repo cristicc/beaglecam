@@ -5,7 +5,7 @@
 PROJECT = rpmsgcam-app
 INCLUDE_DIR = include
 
-SOURCES = fb.c i2cfunc.c log.c main.c ov7670-ctrl.c rpmsg-cam.c
+SOURCES = fb.c gpio-util.c i2cfunc.c log.c main.c ov7670-ctrl.c rpmsg-cam.c
 LIBS = -pthread
 
 ALL_CPPFLAGS = -I $(INCLUDE_DIR) $(CPPFLAGS)

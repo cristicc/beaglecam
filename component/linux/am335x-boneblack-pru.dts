@@ -107,7 +107,7 @@
 
 	beaglecam_pins: pinmux_beaglecam_pins {
 		pinctrl-single,pins = <
-			/* GPIO ouput on P9_13 to signal system boot completion */
+			/* GPIO output on P9_13 to signal system boot completion */
 			AM33XX_PADCONF(AM335X_PIN_GPMC_WPN, PIN_OUTPUT, MUX_MODE7)
 
 			/* PRU1 output on P8_20 to control a diagnosis LED */
