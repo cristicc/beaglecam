@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include "fb.h"
+#include "gpio-util.h"
 #include "log.h"
 #include "ov7670-ctrl.h"
 #include "rpmsg-cam.h"
@@ -75,6 +76,14 @@ struct prog_opts {
 	const char *dump_file;
 };
 
+/* Frame acquire statistics */
+struct frame_acq_stats {
+	unsigned int total_frames;
+	unsigned int dropped_frames;
+	unsigned int discarded_frames;
+	unsigned int rpmsg_errors;
+};
+
 /* Frame display statistics */
 struct frame_disp_stats {
 	unsigned long long start_time;
@@ -115,6 +124,13 @@ static struct ring_buffer frame_ring = {
 	.writer = 0,
 	.frame_rdy = PTHREAD_COND_INITIALIZER,
 	.frame_rdy_lock = PTHREAD_MUTEX_INITIALIZER,
+};
+
+/*
+ * Generic structure to store an array of arg pointers.
+ */
+struct composite_arg {
+	void *args[5];
 };
 
 /* Flag for stopping the application gracefully. */
@@ -159,9 +175,16 @@ static int setup_signal_handler()
  */
 static void acquire_frames_cleanup_handler(void *arg)
 {
+	struct composite_arg *carg = (struct composite_arg *)arg;
+	struct frame_acq_stats *frame_stats = (struct frame_acq_stats *)carg->args[1];
+
 	log_info("Stopping frames acquisition thread");
 
-	rpmsg_cam_stop((rpmsg_cam_handle_t)arg);
+	rpmsg_cam_stop((rpmsg_cam_handle_t)carg->args[0]);
+
+	log_info("Frame acquire stats: total=%u, dropped=%u, discarded=%u, rpmsgerr=%u",
+			 frame_stats->total_frames, frame_stats->dropped_frames,
+			 frame_stats->discarded_frames, frame_stats->rpmsg_errors);
 }
 
 /*
@@ -170,11 +193,15 @@ static void acquire_frames_cleanup_handler(void *arg)
  */
 static void *acquire_frames(void *rpmsg_cam_h)
 {
-	static struct rpmsg_cam_frame dropped_frame;
+	struct frame_acq_stats frame_stats;
+	struct rpmsg_cam_frame dropped_frame;
+	struct composite_arg carg;
 	int head, tail, ret;
 
 	log_info("Starting frames acquisition thread");
-	pthread_cleanup_push(acquire_frames_cleanup_handler, rpmsg_cam_h);
+	carg.args[0] = rpmsg_cam_h;
+	carg.args[1] = &frame_stats;
+	pthread_cleanup_push(acquire_frames_cleanup_handler, &carg);
 
 	ret = rpmsg_cam_start(rpmsg_cam_h);
 	if (ret != 0) {
@@ -182,6 +209,7 @@ static void *acquire_frames(void *rpmsg_cam_h)
 		goto cleanup;
 	}
 
+	memset(&frame_stats, 0, sizeof(frame_stats));
 	dropped_frame.handle = rpmsg_cam_h;
 
 	while (1) {
@@ -191,11 +219,16 @@ static void *acquire_frames(void *rpmsg_cam_h)
 		if (CIRC_SPACE(head, tail, FRAME_RING_SIZE) >= 1) {
 			ret = rpmsg_cam_get_frame(frame_ring.buf[head]);
 			if (ret == -1) {
+				frame_stats.rpmsg_errors++;
 				log_error("Failed to get frame: %d", ret);
 				break;
 			}
+
+			frame_stats.total_frames++;
+
 			if (ret < -1) {
-				log_debug("Skipping frame due to error: %d", ret);
+				frame_stats.discarded_frames++;
+				log_debug("Discarding frame due to error: %d", ret);
 				continue; /* Ignore frame & sync errors */
 			}
 
@@ -215,12 +248,13 @@ static void *acquire_frames(void *rpmsg_cam_h)
 
 			ret = rpmsg_cam_get_frame(&dropped_frame);
 			if (ret == -1) {
-				log_error("Failed to get frame: %d", ret);
+				frame_stats.rpmsg_errors++;
+				log_error("Failed to get dropped frame: %d", ret);
 				break;
 			}
 
-			/* Add cancellation point */
-			pthread_testcancel();
+			frame_stats.total_frames++;
+			frame_stats.dropped_frames++;
 		}
 	}
 
@@ -255,11 +289,12 @@ static void display_frames_cleanup_handler(void *arg)
  * Sends frames to the FB as soon as they are ready.
  * It acts as a single consumer (reader).
  */
-static void *display_frames(void *pg_opts)
+static void *display_frames(void *arg)
 {
-	struct prog_opts *opts = (struct prog_opts *)pg_opts;
+	struct composite_arg *carg = (struct composite_arg *)arg;
+	struct prog_opts *opts = (struct prog_opts *)carg->args[0];
+	int gpioline_fd = (int)carg->args[1];
 	struct frame_disp_stats frame_stats;
-	int gpioline_fd = -1;
 	int head, tail, ret;
 
 	log_info("Starting FB display thread");
@@ -268,26 +303,15 @@ static void *display_frames(void *pg_opts)
 	frame_stats.total_frames = 0;
 
 	fb_clear();
-	if (opts->max_frames == 0) {
-		prog_stop();
-		return NULL;
-	}
 
-	/* Initialize GPIO output line */
-	if ((opts->gpiochip_dev[0] != 0) && (opts->gpioline_label[0] != 0)) {
-		log_info("Initializing GPIO output line: %s", opts->gpioline_label);
+	if (opts->max_frames == 0)
+		goto err_prog_stop;
 
-		gpioline_fd = gpioutil_line_request_output(opts->gpiochip_dev, opts->gpioline_label);
-		if (gpioline_fd < 0)
-			log_warn("Failed to initialize GPIO output line");
-	}
-
-	/* Cond var mutex must be locked before calling pthread_cond_wait() */
+	/* Mutex must be locked before calling pthread_cond_wait() */
 	ret = pthread_mutex_lock(&frame_ring.frame_rdy_lock);
 	if (ret != 0) {
 		log_error("pthread_mutex_lock failed: %s", strerror(ret));
-		prog_stop();
-		return NULL;
+		goto err_prog_stop;
 	}
 
 	pthread_cleanup_push(display_frames_cleanup_handler, &frame_stats);
@@ -306,8 +330,7 @@ static void *display_frames(void *pg_opts)
 			if (frame_ring.buf[tail]->seq == 0) {
 				if (gpioline_fd >= 0) {
 					gpioutil_line_set_value(gpioline_fd, 1);
-					close(gpioline_fd);
-					gpioline_fd = -1;
+					log_info("Signaled GPIO line: %s", opts->gpioline_label);
 				}
 
 				if (opts->dump_file[0] != 0) {
@@ -336,9 +359,7 @@ static void *display_frames(void *pg_opts)
 	/* Calls display_frames_cleanup_handler() on normal thread termination */
 	pthread_cleanup_pop(1);
 
-	if (gpioline_fd >= 0)
-		close(gpioline_fd);
-
+err_prog_stop:
 	prog_stop();
 	return NULL;
 }
@@ -360,8 +381,9 @@ static void usage(char *prog_name, int full)
 int main(int argc, char *argv[])
 {
 	pthread_t frames_acq_thread, frames_disp_thread;
+	struct composite_arg frames_disp_thread_carg;
 	rpmsg_cam_handle_t rpmsg_cam_h = NULL;
-	int opt, ret;
+	int gpioline_fd, opt, ret;
 
 	struct prog_opts options = {
 		.log_level = LOG_INFO,
@@ -483,6 +505,15 @@ int main(int argc, char *argv[])
 		goto free_ring;
 	}
 
+	/* Initialize GPIO output line */
+	if ((options.gpiochip_dev[0] != 0) && (options.gpioline_label[0] != 0)) {
+		log_info("Initializing GPIO output line: %s", options.gpioline_label);
+
+		gpioline_fd = gpioutil_line_request_output(options.gpiochip_dev, -1, options.gpioline_label);
+		if (gpioline_fd < 0)
+			log_error("Failed to initialize GPIO output line: %s", options.gpioline_label);
+	}
+
 	/* Allocate memory for frames circular buffer */
 	for (int i = 0; i < FRAME_RING_SIZE; i++) {
 		frame_ring.buf[i] = malloc(sizeof(struct rpmsg_cam_frame));
@@ -495,7 +526,10 @@ int main(int argc, char *argv[])
 	}
 
 	log_debug("Creating frame display thread");
-	ret = pthread_create(&frames_disp_thread, NULL, display_frames, &options);
+	frames_disp_thread_carg.args[0] = &options;
+	frames_disp_thread_carg.args[1] = (void *)gpioline_fd;
+
+	ret = pthread_create(&frames_disp_thread, NULL, display_frames, &frames_disp_thread_carg);
 	if (ret != 0) {
 		log_fatal("Failed to create frame display thread: %s", strerror(ret));
 		goto free_ring;
@@ -510,7 +544,7 @@ int main(int argc, char *argv[])
 	}
 
 	while (prog_stopping == 0)
-		sleep(1);
+		usleep(100000);
 
 	log_info("Stopping rpmsgcam app");
 
@@ -524,6 +558,9 @@ join_disp:
 free_ring:
 	for (int i = 0; i < FRAME_RING_SIZE; i++)
 		free(frame_ring.buf[i]);
+
+	if (gpioline_fd >= 0)
+		close(gpioline_fd);
 
 	rpmsg_cam_release(rpmsg_cam_h);
 	fb_release();

@@ -99,7 +99,12 @@ static int rpmsg_cam_read_msg(struct rpmsg_cam_handle *h, int exp_seq,
 			return 0;
 		if (msg->cap_hdr.frm >= BCAM_FRM_INVALID)
 			return -2;
-		return (msg->cap_hdr.seq == exp_seq ? msg->cap_hdr.frm : -3);
+		if (msg->cap_hdr.seq != exp_seq) {
+			log_trace("Received unexpected RPMsg cap seq: %d instead of %d",
+					  msg->cap_hdr.seq, exp_seq);
+			return -3;
+		}
+		return msg->cap_hdr.frm;
 	}
 
 	log_warn("Received unknown RPMsg type: 0x%x", msg->type);
@@ -335,7 +340,6 @@ int rpmsg_cam_get_frame(struct rpmsg_cam_frame* frame)
 			continue;
 
 		default:
-			log_debug("Discarding frame on RPMsg error: %d", ret);
 			return ret;
 		}
 
@@ -350,7 +354,7 @@ int rpmsg_cam_get_frame(struct rpmsg_cam_frame* frame)
 				return -2;
 			}
 
-			log_debug("Received end frame section: count=%d", seq);
+			log_debug("Received end frame section (total sections=%d)", seq);
 			frame->seq = h->frame_cnt++;
 			break;
 		}
