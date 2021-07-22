@@ -41,10 +41,10 @@
 #define DEFAULT_FB_DEV			"/dev/fb0"
 #define DEFAULT_RPMSG_DEV		"/dev/rpmsgcam31"
 #define DEFAULT_GPIOCHIP_DEV	"/dev/gpiochip3"
-#define DEFAULT_GPIOLINE_LABEL	"P9_13"
+#define DEFAULT_GPIOLINE_OFF	31
 
 /* Program options */
-#define PROG_OPT_STR			"l:x:y:m:c:f:r:g:s:h"
+#define PROG_OPT_STR			"l:x:y:m:c:f:r:g:o:s:h"
 
 #define PROG_TRIVIAL_USAGE \
 	"[-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-m MAX_FRAMES]\n" \
@@ -59,8 +59,8 @@
 	"\n -f FB_DEV         LCD display Frame Buffer device path (default "DEFAULT_FB_DEV")" \
 	"\n -r RPMSG_DEV      RPMsg device path (default "DEFAULT_RPMSG_DEV")" \
 	"\n -g GPIOCHIP_DEV   GPIO chip device path (default "DEFAULT_GPIOCHIP_DEV")" \
-	"\n -o GPIOLINE_LABEL Label of the GPIO line to signal the receiving"\
-	"\n                   of the first frame (default "DEFAULT_GPIOLINE_LABEL")" \
+	"\n -o GPIOLINE_OFF   GPIO line offset index relative to GPIO chip device (default "STR(DEFAULT_GPIOLINE_OFF)")." \
+	"\n                   The line is used to signal the receiving of the first frame" \
 	"\n -s DUMP_FILE      File path to save the raw content of the first frame" \
 
 struct prog_opts {
@@ -72,7 +72,7 @@ struct prog_opts {
 	const char *fb_dev;
 	const char *rpmsg_dev;
 	const char *gpiochip_dev;
-	const char *gpioline_label;
+	int gpioline_off;
 	const char *dump_file;
 };
 
@@ -330,7 +330,7 @@ static void *display_frames(void *arg)
 			if (frame_ring.buf[tail]->seq == 0) {
 				if (gpioline_fd >= 0) {
 					gpioutil_line_set_value(gpioline_fd, 1);
-					log_info("Signaled GPIO line: %s", opts->gpioline_label);
+					log_info("Signaled GPIO line: %d", opts->gpioline_off);
 				}
 
 				if (opts->dump_file[0] != 0) {
@@ -394,7 +394,7 @@ int main(int argc, char *argv[])
 		.fb_dev = DEFAULT_FB_DEV,
 		.rpmsg_dev = DEFAULT_RPMSG_DEV,
 		.gpiochip_dev = DEFAULT_GPIOCHIP_DEV,
-		.gpioline_label = DEFAULT_GPIOLINE_LABEL,
+		.gpioline_off = DEFAULT_GPIOLINE_OFF,
 		.dump_file = "",
 	};
 
@@ -445,7 +445,7 @@ int main(int argc, char *argv[])
 			break;
 
 		case 'o':
-			options.gpioline_label = optarg;
+			options.gpioline_off = strtol(optarg, NULL, 10);
 			break;
 
 		case 's':
@@ -506,12 +506,12 @@ int main(int argc, char *argv[])
 	}
 
 	/* Initialize GPIO output line */
-	if ((options.gpiochip_dev[0] != 0) && (options.gpioline_label[0] != 0)) {
-		log_info("Initializing GPIO output line: %s", options.gpioline_label);
+	if ((options.gpiochip_dev[0] != 0) && (options.gpioline_off >= 0)) {
+		log_info("Initializing GPIO output line: %d", options.gpioline_off);
 
-		gpioline_fd = gpioutil_line_request_output(options.gpiochip_dev, -1, options.gpioline_label);
+		gpioline_fd = gpioutil_line_request_output(options.gpiochip_dev, options.gpioline_off);
 		if (gpioline_fd < 0)
-			log_error("Failed to initialize GPIO output line: %s", options.gpioline_label);
+			log_error("Failed to initialize GPIO output line: %d", options.gpioline_off);
 	}
 
 	/* Allocate memory for frames circular buffer */

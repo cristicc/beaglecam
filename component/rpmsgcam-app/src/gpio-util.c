@@ -24,8 +24,7 @@
  *  $ cat /sys/kernel/debug/gpio
  *
  */
-int gpioutil_line_request_output(const char *gpiochip_dev_path,
-								 int line_offset, const char *line_name)
+int gpioutil_line_request_output(const char *gpiochip_dev_path, int line_offset)
 {
 	struct gpiohandle_request req;
 	struct gpioline_info linfo;
@@ -37,8 +36,6 @@ int gpioutil_line_request_output(const char *gpiochip_dev_path,
 		return gpiochip_fd;
 	}
 
-	//TODO: use line_offset if >=0, otherwise try to get it based on line_name
-	line_offset = 31;
 	req.lineoffsets[0] = line_offset;
 	req.flags = GPIOHANDLE_REQUEST_OUTPUT;
 	req.default_values[0] = 0;
@@ -63,7 +60,6 @@ int gpioutil_line_request_output(const char *gpiochip_dev_path,
 	}
 
 	log_info("Configured GPIO line %d as output (line name: %s)", line_offset, linfo.name);
-
 	ret = req.fd > 0 ? req.fd : -1;
 
 err_close:
