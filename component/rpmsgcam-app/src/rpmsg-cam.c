@@ -165,7 +165,7 @@ rpmsg_cam_handle_t rpmsg_cam_init(const char *rpmsg_dev_path, int xres, int yres
 	struct bcam_cap_config setup_data;
 	struct rpmsg_cam_handle *h;
 	struct epoll_event ev;
-	int bpp = 2, ret;
+	int bpp = 2, i, ret;
 
 	h = malloc(sizeof(*h));
 	if (h == NULL) {
@@ -173,11 +173,22 @@ rpmsg_cam_handle_t rpmsg_cam_init(const char *rpmsg_dev_path, int xres, int yres
 		return NULL;
 	}
 
-	h->rpmsg_fd = open(rpmsg_dev_path, O_RDWR);
-	if (h->rpmsg_fd < 0) {
-		log_error("Failed to open %s: %s", rpmsg_dev_path, strerror(errno));
-		free(h);
-		return NULL;
+	/* RPMsg device might not be ready, let's keep trying for up to 3000 ms */
+	for (i = 0;; i++) {
+		h->rpmsg_fd = open(rpmsg_dev_path, O_RDWR);
+		if (h->rpmsg_fd >= 0)
+			break;
+
+		if (errno != ENOENT || i == 3000) {
+			log_error("Failed to open %s: %s", rpmsg_dev_path, strerror(errno));
+			free(h);
+			return NULL;
+		}
+
+		if (i == 0)
+			log_info("Waiting for device: %s", rpmsg_dev_path);
+
+		usleep(1000);
 	}
 
 	h->ep_fd = epoll_create1(0);
