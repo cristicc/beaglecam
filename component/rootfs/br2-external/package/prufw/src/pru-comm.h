@@ -7,21 +7,34 @@
 #ifndef _PRU_COMM_H
 #define _PRU_COMM_H
 
-#define PRU_FW_VERSION			"0.0.3"
+/* Track firmware changes */
+#define PRU_FW_VERSION			"0.0.5"
+
+/* Local address of the PRU shared RAM */
+#define SHARED_MEM_ADDR			0x10000
+
+/* PRU1-to-PRU0 irq (shared unused RPMsg irq defined as 'kick' in Linux DT) */
+#define PRU1_PRU0_INTERRUPT		17
+
+/* PRU0-to-PRU1 irq (TODO: define 'xfer' in the Linux DT) */
+#define PRU0_PRU1_INTERRUPT		20
+
+/* PRU cores run at 200 MHz */
+#define PRU_CYCLES_PER_USEC		200
 
 /*
  * Inter-PRU signalling.
  */
+struct pru_cmd {
+	uint8_t id;			/* Member of enum pru_cmd_id */
+	uint8_t arg;			/* Optional command argument */
+};
+
 enum pru_cmd_id {
 	PRU_CMD_NONE = 0,		/* No command */
 	PRU_CMD_ACK,			/* Common cmd acknoledge */
 	PRU_CMD_CAP_START,		/* PRU0 to start frame aquisition */
 	PRU_CMD_CAP_STOP,		/* PRU0 to stop frame aquisition */
-};
-
-struct pru_cmd {
-	uint8_t id;			/* Member of enum pru_cmd_id */
-	uint8_t arg;			/* Optional command argument */
 };
 
 /*
@@ -40,9 +53,6 @@ struct shared_mem {
 		uint32_t img_sz;	/* xres * yres * bpp */
 	} cap_config;
 };
-
-/* Local address of the PRU shared RAM */
-#define SHARED_MEM_ADDR			0x10000
 
 /*
  * Data captured from camera module by PRU0 and XFER-ed to PRU1.
@@ -75,10 +85,11 @@ struct cap_data {
 /* Sets bank_no to next scratch bank */
 #define NEXT_BANK(bank_no)		(bank_no) = (bank_no) == 2 ? 0 : (bank_no) + 1
 
-/* PRU1-to-PRU0 irq (shared unused RPMsg irq defined as 'kick' in Linux DT) */
-#define PRU1_PRU0_INTERRUPT		17
-/* PRU0-to-PRU1 irq (TODO: define 'xfer' in the Linux DT) */
-#define PRU0_PRU1_INTERRUPT		20
+/*
+ * PRU sleep helpers
+ */
+#define USLEEP(usec)			__delay_cycles(PRU_CYCLES_PER_USEC * (usec))
+#define MSLEEP(msec)			USLEEP(1000 * (msec))
 
 /*
  * PRU IO helpers
@@ -98,8 +109,7 @@ struct cap_data {
 #define LED_DIAG_ENABLED
 
 /*
- * LED blink frequency should be provided in dHz (1/10 Hz).
- * Note the PRU cores frequency is 200 MHz.
+ * LED blink frequency should be provided in dHz (= 0.1 Hz).
  */
 #ifndef LED_DIAG_ENABLED
 #define BLINK_LED(pin, dHz)		((void)0)
@@ -107,9 +117,9 @@ struct cap_data {
 #define BLINK_LED(pin, dHz)				\
 	do {						\
 		WRITE_PIN(pin, HIGH);			\
-		__delay_cycles(10 * 100000000 / (dHz));	\
+		MSLEEP(500 * 10 / (dHz));		\
 		WRITE_PIN(pin, LOW);			\
-		__delay_cycles(10 * 100000000 / (dHz));	\
+		MSLEEP(500 * 10 / (dHz));		\
 	} while(0)
 #endif
 

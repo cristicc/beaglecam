@@ -27,6 +27,7 @@
 #include <stdint.h>
 
 #include <pru_cfg.h>
+#include <pru_ctrl.h>
 #include <pru_intc.h>
 #include <pru_rpmsg.h>
 
@@ -60,6 +61,12 @@ volatile struct shared_mem *smem = (struct shared_mem *)SHARED_MEM_ADDR;
  */
 #define VIRTIO_CONFIG_S_DRIVER_OK	4
 
+/* Timeout waiting for ACKs from PRU0 */
+#define PRU0_ACK_TMOUT_USEC		1500
+
+/* Timeout waiting for cap_data messages from PRU0 */
+#define PRU0_CAP_TMOUT_USEC		15000
+
 /* Diagnosis via LED blinking */
 #define PIN_LED				13 /* P8_20 */
 
@@ -84,18 +91,54 @@ uint8_t arm_send_buf[RPMSG_MESSAGE_SIZE];
 enum bcam_cap_status run_state = BCAM_CAP_STOPPED;
 
 /*
- * Utility to start/stop data capture on PRU0.
+ * Disables PRU1 cycle counter in CTRL register.
  */
-void start_stop_capture(uint8_t start) {
-	uint8_t ack_iter;
+void disable_timer()
+{
+	PRU1_CTRL.CTRL_bit.CTR_EN = 0;
+}
 
+/*
+ * Resets the counter value in the PRU1 CYCLE register. Note this requires the
+ * counter to be disabled. Afterwards (re)enables the counter in CTRL register.
+ */
+void enable_timer()
+{
+	disable_timer();
+
+	PRU1_CTRL.CYCLE = 0;
+	PRU1_CTRL.CTRL_bit.CTR_EN = 1;
+}
+
+/*
+ * Verifies if the counter value in the CYCLE register exceeded
+ * the equivalent no. of cycles for the given timeout duration.
+ *
+ * Returns 0 if no timeout occurred. Otherwise, disables the timer
+ * and returns 1.
+ */
+int timer_expired(uint32_t tmout_usec)
+{
+	if (PRU1_CTRL.CYCLE < PRU_CYCLES_PER_USEC * tmout_usec)
+		return 0;
+
+	disable_timer();
+	return 1;
+}
+
+/*
+ * Utility to start/stop data capture on PRU0.
+ * Returns 0 on success or -1 on failure.
+ */
+int16_t start_stop_capture(uint8_t start) {
 	/* Disable interrupt from PRU0 and clear its status */
 	CT_INTC.EICR_bit.EN_CLR_IDX = PRU0_PRU1_INTERRUPT;
 	CT_INTC.SICR_bit.STS_CLR_IDX = PRU0_PRU1_INTERRUPT;
 
-	/* Send command to PRU0 */
+	/* Prepare command for PRU0 */
 	smem->pru1_cmd.id = PRU_CMD_NONE;
 	smem->pru0_cmd.id = start ? PRU_CMD_CAP_START : PRU_CMD_CAP_STOP;
+	enable_timer();
 
 	/*
 	 * Trigger interrupt on PRU0, see ARM335x TRM section:
@@ -104,9 +147,9 @@ void start_stop_capture(uint8_t start) {
 	__R31 = PRU1_PRU0_INTERRUPT + 16;
 
 	/* Wait for ACK from PRU0 */
-	for (ack_iter = 0; ack_iter < 128 * 1024; ack_iter++) {
-		if (smem->pru1_cmd.id == PRU_CMD_ACK)
-			break;
+	while (smem->pru1_cmd.id != PRU_CMD_ACK) {
+		if (timer_expired(PRU0_ACK_TMOUT_USEC) != 0)
+			return -1;
 	}
 
 	if (start) {
@@ -115,11 +158,15 @@ void start_stop_capture(uint8_t start) {
 
 		WRITE_PIN(PIN_LED, HIGH);
 		run_state = BCAM_CAP_STARTED;
+		enable_timer();
 
 	} else {
 		WRITE_PIN(PIN_LED, LOW);
 		run_state = BCAM_CAP_STOPPED;
+		disable_timer();
 	}
+
+	return 0;
 }
 
 /*
@@ -349,7 +396,7 @@ void main(void)
 	uint16_t exp_cap_seq;
 	uint8_t crt_bank;
 
-	/* Initializations */
+	/* Initialization */
 	init_pru_core();
 	init_rpmsg(&transport, 0);
 
@@ -360,10 +407,7 @@ void main(void)
 			/* Clear the event status */
 			CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
 
-			/*
-			 * Receive all available messages, multiple messages
-			 * can be sent per kick.
-			 */
+			/* Receive all available messages, multiple messages can be sent per kick */
 			while (pru_rpmsg_receive(&transport, &rpmsg_src, &rpmsg_dst,
 						 arm_recv_buf, &arm_cmd_len) == PRU_RPMSG_SUCCESS) {
 				if (arm_cmd_len < sizeof(*arm_cmd) || (arm_cmd->magic_byte.high << 8
@@ -383,7 +427,8 @@ void main(void)
 					smem->cap_config.xres = ((struct bcam_cap_config *)arm_cmd->data)->xres;
 					smem->cap_config.yres = ((struct bcam_cap_config *)arm_cmd->data)->yres;
 					smem->cap_config.bpp = ((struct bcam_cap_config *)arm_cmd->data)->bpp;
-					smem->cap_config.img_sz = smem->cap_config.xres * smem->cap_config.yres * smem->cap_config.bpp;
+					smem->cap_config.img_sz = smem->cap_config.xres * smem->cap_config.yres
+								* smem->cap_config.bpp;
 					smem->cap_config.test_mode = 1;
 
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
@@ -391,7 +436,11 @@ void main(void)
 					break;
 
 				case BCAM_ARM_MSG_CAP_START:
-					start_stop_capture(1);
+					if (start_stop_capture(1) != 0) {
+						rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+							       BCAM_PRU_LOG_ERROR, "Failed to start capture");
+						break;
+					}
 
 					crt_frame_data_len = 0;
 					exp_cap_seq = 1;
@@ -399,90 +448,134 @@ void main(void)
 
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
 						       BCAM_PRU_LOG_INFO, "Capture started");
+
+					enable_timer();
 					break;
 
 				case BCAM_ARM_MSG_CAP_STOP:
-					start_stop_capture(0);
-
-					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_PRU_LOG_INFO, "Capture stopped");
+					if (start_stop_capture(0) != 0)
+						rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+							       BCAM_PRU_LOG_ERROR, "Failed to stop capture");
+					else
+						rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+							       BCAM_PRU_LOG_INFO, "Capture stopped");
 					break;
 
 				default:
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_PRU_LOG_WARN, "Unknown cmd");
+						       BCAM_PRU_LOG_WARN, "Unknown command");
 				}
 			}
 		}
 
-		if (run_state != BCAM_CAP_STARTED)
-			continue;
-
-		/*
-		 * Check PRU0_PRU1_INTERRUPT generated by PRU0 when captured
-		 * data is ready to be read by PRU1 from one of the banks.
-		 */
-		if ((CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << PRU0_PRU1_INTERRUPT)) == 0)
-			continue;
-
-		/* Clear the status of PRU0_PRU1_INTERRUPT */
-		CT_INTC.SICR_bit.STS_CLR_IDX = PRU0_PRU1_INTERRUPT;
-
-		/*
-		 * Load data stored by PRU0 in the current scratch pad bank. Note
-		 * the switch is necessary for "error #664: expected an integer constant".
-		 */
-		switch (crt_bank) {
-		case 0:
-			LOAD_DATA(0, capture_buf);
-			break;
-		case 1:
-			LOAD_DATA(1, capture_buf);
-			break;
-		case 2:
-			LOAD_DATA(2, capture_buf);
-			break;
-		}
-
-		/* Move to next scratch bank */
-		NEXT_BANK(crt_bank);
-
-		if (capture_buf.seq != exp_cap_seq) {
-			start_stop_capture(0);
-
-			/* Flush cached data */
-			capture_buf.seq = BCAM_FRM_INVALID;
-			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
-
-			rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_ERROR,
-				       "Unexpected cap seq");
-			continue;
-		}
-
-		crt_frame_data_len += capture_buf.len;
-
-		if (crt_frame_data_len >= smem->cap_config.img_sz) {
-			capture_buf.seq = BCAM_FRM_END;
-			/* Discard any extra captured data */
-			capture_buf.len -= crt_frame_data_len - smem->cap_config.img_sz;
-			/* Force sending completed frame */
-			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
-
-			if (smem->cap_config.test_mode != 0) {
-				start_stop_capture(0);
-				/* Wait 0.05 s */
-				__delay_cycles(10000000);
-
-				start_stop_capture(1);
-				crt_frame_data_len = 0;
-				exp_cap_seq = 1;
-				crt_bank = 0;
+		if (run_state == BCAM_CAP_PAUSED) {
+			if (smem->cap_config.test_mode == 0) {
+				/* TODO: check VSYNC line */
+				/* VSYNC not yet LOW, process pending ARM commands */
+				continue;
+			} else {
+				/* Test mode: wait 50 ms before generating new frame */
+				MSLEEP(50);
 			}
 
-		} else {
+			/* Resume frame acquisition */
+			if (start_stop_capture(1) != 0)
+				rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+					       BCAM_PRU_LOG_ERROR, "Failed to resume capture");
+
+			crt_frame_data_len = 0;
+			exp_cap_seq = 1;
+			crt_bank = 0;
+		}
+
+		while (run_state == BCAM_CAP_STARTED) {
+			if (timer_expired(PRU0_CAP_TMOUT_USEC) != 0) {
+				start_stop_capture(0);
+
+				/* Discard any cached frame data */
+				capture_buf.seq = BCAM_FRM_INVALID;
+				capture_buf.len = 0;
+				rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
+
+				rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+					       BCAM_PRU_LOG_ERROR, "Timeout receiving data from PRU0");
+				break;
+			}
+
+			/*
+			 * Check PRU0_PRU1_INTERRUPT generated by PRU0 when captured
+			 * data is ready to be read by PRU1 from one of the banks.
+			 */
+			if ((CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << PRU0_PRU1_INTERRUPT)) == 0)
+				continue;
+
+			/* Clear the status of PRU0_PRU1_INTERRUPT */
+			CT_INTC.SICR_bit.STS_CLR_IDX = PRU0_PRU1_INTERRUPT;
+
+			/*
+			 * Load data stored by PRU0 in the current scratch pad bank. Note
+			 * the switch is necessary for "error #664: expected an integer constant".
+			 */
+			switch (crt_bank) {
+			case 0:
+				LOAD_DATA(0, capture_buf);
+				break;
+			case 1:
+				LOAD_DATA(1, capture_buf);
+				break;
+			case 2:
+				LOAD_DATA(2, capture_buf);
+				break;
+			}
+
+			/* Move to next scratch bank */
+			NEXT_BANK(crt_bank);
+
+			if (capture_buf.seq != exp_cap_seq) {
+				start_stop_capture(0);
+
+				/* Discard any cached frame data */
+				capture_buf.seq = BCAM_FRM_INVALID;
+				rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
+
+				rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src, BCAM_PRU_LOG_ERROR,
+					       "Unexpected cap seq");
+				break;
+			}
+
+			crt_frame_data_len += capture_buf.len;
+
+			if (crt_frame_data_len >= smem->cap_config.img_sz) {
+				/* Received enough frame data, mark the FRM_END section */
+				capture_buf.seq = BCAM_FRM_END;
+
+				/* Discard any extra captured data */
+				capture_buf.len -= crt_frame_data_len - smem->cap_config.img_sz;
+
+				/* Force sending completed frame */
+				rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
+
+				/* Temporarily pause frame acquisition */
+				if (start_stop_capture(0) != 0)
+					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+						       BCAM_PRU_LOG_ERROR, "Failed to pause capture");
+				run_state = BCAM_CAP_PAUSED;
+
+				if (smem->cap_config.test_mode == 0) {
+					/* Wait for VSYNC turning HIGH */
+					USLEEP(1);
+				}
+
+				break;
+			}
+
+			/* Append new frame data to the transmission cache */
 			capture_buf.seq = (exp_cap_seq > 1 ? BCAM_FRM_BODY : BCAM_FRM_START);
 			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 0);
+
+			/* Prepare for receiving more frame data */
 			exp_cap_seq++;
+			enable_timer();
 		}
 	}
 }

@@ -96,7 +96,7 @@ uint8_t generate_test_data(struct cap_data *buf)
 		 * Simulate 1 MHz PCLK. Note the delay is doubled because we need
 		 * 2 PCLK ticks, one for each of the 2 generated data bytes above.
 		 */
-		__delay_cycles(2 * 200);
+		USLEEP(2);
 
 		/* Process command from PRU1 */
 		if (check_pru1_cmd() == PRU_CMD_CAP_STOP) {

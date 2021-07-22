@@ -78,6 +78,7 @@ enum bcam_pru_msg_type {
 enum bcam_cap_status {
 	BCAM_CAP_STOPPED = 0,
 	BCAM_CAP_STARTED,
+	BCAM_CAP_PAUSED,
 };
 
 /* Log levels. */
