@@ -5,3 +5,10 @@ config BR2_PACKAGE_PRUFW
 	help
 	  Firmware for PRU0 and PRU1 cores to read data from the camera sensor
 	  and send it to the linux kernel via RPMSG.
+
+if BR2_PACKAGE_PRUFW
+
+config BR2_PACKAGE_PRUFW_LED_DIAG
+	bool "Enable PRU firmware diagnosis via LED blinking"
+
+endif

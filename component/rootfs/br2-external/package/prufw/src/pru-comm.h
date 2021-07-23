@@ -105,9 +105,6 @@ struct cap_data {
 
 #define READ_PIN(bit)			(__R31 >> (bit)) & 1
 
-/* Diagnosis via LED blinking */
-#define LED_DIAG_ENABLED
-
 /*
  * LED blink frequency should be provided in dHz (= 0.1 Hz).
  */
