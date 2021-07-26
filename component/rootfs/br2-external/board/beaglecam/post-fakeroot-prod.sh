@@ -2,10 +2,12 @@
 
 TARGET_DIR=$1
 
-cd $TARGET_DIR
-rm -rf \
- etc root tmp var media mnt opt run \
- lib lib32 \
- sbin \
- usr/lib usr/lib32 usr/sbin usr/share \
+cd ${TARGET_DIR}
 
+cp -dR --preserve=mode,timestamps \
+    ${PRJ_BINARIES_DIR}/lib ${PRJ_BINARIES_DIR}/usr .
+
+rm -rf \
+ etc lib32 media mnt opt root run tmp \
+ usr/lib usr/lib32 usr/sbin usr/share \
+ var \

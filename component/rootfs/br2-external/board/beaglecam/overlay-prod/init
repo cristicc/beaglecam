@@ -1,13 +1,27 @@
 #!/bin/sh
+#
+# OS boot init script.
+#
 
 # devtmpfs does not get automounted for initramfs
 /bin/mount -t devtmpfs devtmpfs /dev
 #/bin/mount -t proc proc /proc
 /bin/mount -t sysfs sysfs /sys
 
-echo "Starting ffmpeg" > /dev/console
-#ffmpeg -t  10 -f video4linux2 -video_size 432x240 -input_format mjpeg -i /dev/video0 -pix_fmt rgb565le -f fbdev /dev/fb0 >/dev/console 2>&1
-#ffmpeg -t 0.1 -f video4linux2 -video_size 432x240 -input_format mjpeg -i /dev/video0 -pix_fmt rgb565le -f fbdev /dev/fb0 >/dev/console 2>&1
- ffmpeg        -f video4linux2 -video_size 432x240 -input_format mjpeg -i /dev/video0 -frames:v 1 -pix_fmt rgb565le -f fbdev /dev/fb0 >/dev/console 2>&1
+#echo "Starting ffmpeg" >/dev/console
+#ffmpeg -f video4linux2 -video_size 432x240 -input_format mjpeg -i /dev/video0 -frames:v 1 -pix_fmt rgb565le -f fbdev /dev/fb0 >/dev/console 2>&1
 
-exec /bin/sh "$@"
+echo "Starting PRUs" >/dev/console
+
+RPROC_SYS_PREFIX=/sys/class/remoteproc/remoteproc
+for PRU_INDEX in 0 1; do
+    [ -d ${RPROC_SYS_PREFIX}${PRU_INDEX} ] && echo start >${RPROC_SYS_PREFIX}${PRU_INDEX}/state
+done
+
+modprobe rpmsg_cam
+
+echo "Starting rpmsgcam-app" >/dev/console
+
+rpmsgcam-app -l 3 -x 160 -y 120 -c - -f /dev/fb0 -r /dev/rpmsgcam31 -g /dev/gpiochip3 -o 31 -m 1 >/dev/console 2>&1
+
+exec /bin/sh
