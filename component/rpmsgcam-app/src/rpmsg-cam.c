@@ -304,7 +304,7 @@ int rpmsg_cam_get_frame(struct rpmsg_cam_frame* frame)
 						  data_len, h->img_sz);
 				return -2;
 			}
-			log_trace("Received start frame section");
+			log_debug("Received start frame section");
 			memcpy(frame->pixels, data, data_len);
 			cnt = data_len;
 			seq = 1;
@@ -351,6 +351,8 @@ int rpmsg_cam_get_frame(struct rpmsg_cam_frame* frame)
 			continue;
 
 		default:
+			log_debug("Aborting frame transfer at %d out of %d bytes (err=%d)",
+					  cnt, h->img_sz, ret);
 			return ret;
 		}
 
@@ -361,14 +363,17 @@ int rpmsg_cam_get_frame(struct rpmsg_cam_frame* frame)
 
 		if (ret == BCAM_FRM_END) {
 			if (cnt < h->img_sz) {
-				log_debug("Received incomplete frame: %d vs. %d bytes", cnt, h->img_sz);
+				log_debug("Received incomplete frame: %d out of %d bytes",
+						  cnt, h->img_sz);
 				return -2;
 			}
 
-			log_debug("Received end frame section (total sections=%d)", seq);
+			log_debug("Received end frame section %d (len=%d)", seq, data_len);
 			frame->seq = h->frame_cnt++;
 			break;
 		}
+
+		log_debug("Received body frame section %d (len=%d)", seq, data_len);
 	}
 
 	return 0;

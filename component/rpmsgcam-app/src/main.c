@@ -47,8 +47,8 @@
 #define PROG_OPT_STR			"l:x:y:m:c:f:r:g:o:s:h"
 
 #define PROG_TRIVIAL_USAGE \
-	"[-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-m MAX_FRAMES]\n" \
-	"		[-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
+	"[-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-m MAX_FRAMES]" \
+	"\n                   [-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
 
 #define PROG_FULL_USAGE "Options:" \
 	"\n -l LOG_LEVEL      Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)" \
