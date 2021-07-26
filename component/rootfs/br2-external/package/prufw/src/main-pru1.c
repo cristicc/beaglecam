@@ -393,7 +393,7 @@ void main(void)
 
 	struct cap_data capture_buf;
 	uint32_t crt_frame_data_len;
-	uint16_t exp_cap_seq;
+	uint16_t exp_cap_seq, send_ret;
 	uint8_t crt_bank;
 
 	/* Initialization */
@@ -436,20 +436,9 @@ void main(void)
 					break;
 
 				case BCAM_ARM_MSG_CAP_START:
-					if (start_stop_capture(1) != 0) {
-						rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-							       BCAM_PRU_LOG_ERROR, "Failed to start capture");
-						break;
-					}
-
-					crt_frame_data_len = 0;
-					exp_cap_seq = 1;
-					crt_bank = 0;
-
+					run_state = BCAM_CAP_PAUSED;
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-						       BCAM_PRU_LOG_INFO, "Capture started");
-
-					enable_timer();
+						       BCAM_PRU_LOG_INFO, "Capture initiated");
 					break;
 
 				case BCAM_ARM_MSG_CAP_STOP:
@@ -479,9 +468,12 @@ void main(void)
 			}
 
 			/* Resume frame acquisition */
-			if (start_stop_capture(1) != 0)
+			if (start_stop_capture(1) != 0) {
 				rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
-					       BCAM_PRU_LOG_ERROR, "Failed to resume capture");
+					       BCAM_PRU_LOG_ERROR, "Failed to start/resume capture");
+				start_stop_capture(0);
+				continue;
+			}
 
 			crt_frame_data_len = 0;
 			exp_cap_seq = 1;
@@ -553,7 +545,11 @@ void main(void)
 				capture_buf.len -= crt_frame_data_len - smem->cap_config.img_sz;
 
 				/* Force sending completed frame */
-				rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1);
+				if (rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 1) != PRU_RPMSG_SUCCESS) {
+					init_rpmsg(&transport, 1);
+					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+						       BCAM_PRU_LOG_ERROR, "Failed to send cap data");
+				}
 
 				/* Temporarily pause frame acquisition */
 				if (start_stop_capture(0) != 0)
@@ -571,7 +567,12 @@ void main(void)
 
 			/* Append new frame data to the transmission cache */
 			capture_buf.seq = (exp_cap_seq > 1 ? BCAM_FRM_BODY : BCAM_FRM_START);
-			rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 0);
+			send_ret = rpmsg_send_cap(&transport, rpmsg_dst, rpmsg_src, &capture_buf, 0);
+			if (send_ret != PRU_RPMSG_NO_KICK && send_ret != PRU_RPMSG_SUCCESS) {
+				init_rpmsg(&transport, 1);
+				rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
+					       BCAM_PRU_LOG_ERROR, "Failed to send cap data");
+			}
 
 			/* Prepare for receiving more frame data */
 			exp_cap_seq++;

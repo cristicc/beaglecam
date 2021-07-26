@@ -8,7 +8,7 @@
 #define _PRU_COMM_H
 
 /* Track firmware changes */
-#define PRU_FW_VERSION			"0.0.5"
+#define PRU_FW_VERSION			"0.0.6"
 
 /* Local address of the PRU shared RAM */
 #define SHARED_MEM_ADDR			0x10000
