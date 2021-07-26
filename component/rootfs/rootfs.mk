@@ -13,4 +13,14 @@ define ROOTFS_KCONFIG_FIXUP_CMDS
 	$(call KCONFIG_SET_OPT,BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX,"$${PRJ_TOOLCHAIN_PREFIX}")
 endef
 
+#
+# Since external content (files) might be added to the target image via
+# BR2_ROOTFS_POST_FAKEROOT_SCRIPT, let's make sure the external binaries
+# are stripped (if PRJ_STRIP is set).
+#
+define STRIP_EXTERNAL_BINARIES
+	@$(STRIP_FIND_CMD) | xargs -0 $(STRIPCMD) 2>/dev/null || true
+endef
+ROOTFS_PRE_BUILD_HOOKS += STRIP_EXTERNAL_BINARIES
+
 $(eval $(buildroot-component))

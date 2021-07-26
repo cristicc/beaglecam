@@ -138,9 +138,8 @@ TARGET_OBJCOPY	= $(TARGET_CROSS)objcopy
 TARGET_OBJDUMP	= $(TARGET_CROSS)objdump
 
 ifeq ($(PRJ_STRIP),y)
-  STRIP_STRIP_DEBUG := --strip-debug
   TARGET_STRIP = $(TARGET_CROSS)strip
-  STRIPCMD = $(TARGET_CROSS)strip --remove-section=.comment --remove-section=.note
+  STRIPCMD = $(TARGET_STRIP) --remove-section=.comment --remove-section=.note
 else
   TARGET_STRIP = /bin/true
   STRIPCMD = $(TARGET_STRIP)

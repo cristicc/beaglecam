@@ -176,7 +176,7 @@ include $(sort $(wildcard component/*/*.mk))
 #
 define STRIP_PROJECT_BINARIES
 	@$(call MESSAGE,"Stripping binaries")
-	$(Q)$(STRIP_FIND_CMD) | xargs -0 $(STRIPCMD) 2>/dev/null || true
+	$(STRIP_FIND_CMD) | xargs -0 $(STRIPCMD) 2>/dev/null || true
 endef
 PRJ_POST_INSTALL_HOOKS += STRIP_PROJECT_BINARIES
 
