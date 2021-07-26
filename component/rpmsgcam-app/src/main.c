@@ -383,7 +383,7 @@ int main(int argc, char *argv[])
 	pthread_t frames_acq_thread, frames_disp_thread;
 	struct composite_arg frames_disp_thread_carg;
 	rpmsg_cam_handle_t rpmsg_cam_h = NULL;
-	int gpioline_fd, opt, ret;
+	int gpioline_fd = -1, opt, ret;
 
 	struct prog_opts options = {
 		.log_level = LOG_INFO,
