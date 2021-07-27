@@ -84,7 +84,10 @@ define UBOOT_INSTALL_CMDS
 		)
 	)
 	$(if $(PRJ_UBOOT_UENV_PATH),
-		cp -dpf $(call qstrip,$(PRJ_UBOOT_UENV_PATH)) $(BINARIES_DIR)/
+		cp -dpf $(call qstrip,$(PRJ_UBOOT_UENV_PATH)) $(BINARIES_DIR)/uEnv.txt
+	)
+	$(if $(PRJ_UBOOT_FILES_EXTRA_PATH),
+		cp -dpf $(call qstrip,$(PRJ_UBOOT_FILES_EXTRA_PATH)) $(BINARIES_DIR)/
 	)
 endef
 
