@@ -15,7 +15,6 @@
 #include "fb.h"
 #include "log.h"
 
-static struct fb_fix_screeninfo finfo;
 static struct fb_var_screeninfo vinfo;
 static uint32_t screen_size;
 static int fbfd = -1;
@@ -32,13 +31,6 @@ int fb_init(const char *dev_path)
 	if (fbfd < 0) {
 		log_error("Failed to open %s: %s", dev_path, strerror(errno));
 		return fbfd;
-	}
-
-	/* Get fixed screen information */
-	ret = ioctl(fbfd, FBIOGET_FSCREENINFO, &finfo);
-	if (ret < 0) {
-		log_error("Failed reading fixed FB info: %s", strerror(errno));
-		goto fail;
 	}
 
 	/* Get variable screen information */
@@ -92,7 +84,7 @@ void fb_write(uint16_t *rgb565, int xres, int yres)
 	if (fbfd < 0)
 		return;
 
-	fb_xoff = (vinfo.xres - xres) / 2;
+	fb_xoff = ((int)vinfo.xres - xres) / 2;
 	if (fb_xoff < 0) {
 		fb_xoff = 0;
 		fb_xres = vinfo.xres;
@@ -100,7 +92,7 @@ void fb_write(uint16_t *rgb565, int xres, int yres)
 		fb_xres = xres;
 	}
 
-	fb_yoff = (vinfo.yres - yres) / 2;
+	fb_yoff = ((int)vinfo.yres - yres) / 2;
 	if (fb_yoff < 0) {
 		fb_yoff = 0;
 		fb_yres = vinfo.yres;
@@ -111,7 +103,7 @@ void fb_write(uint16_t *rgb565, int xres, int yres)
 	for (y = 0; y < fb_yres; y++)
 		for (x = 0; x < fb_xres; x++)
 			((uint16_t *)(fbp))[(y + fb_yoff) * vinfo.xres
-								+ x + fb_xoff] = rgb565[y * fb_xres + x];
+								+ x + fb_xoff] = rgb565[y * xres + x];
 }
 
 /*
