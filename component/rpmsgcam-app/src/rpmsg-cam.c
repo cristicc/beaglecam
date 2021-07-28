@@ -18,7 +18,7 @@
 
 #define RPMSG_MESSAGE_SIZE		496
 #define EP_MAX_EVENTS			1
-#define EP_TIMEOUT_MSEC			3000
+#define EP_TIMEOUT_MSEC			1500
 
 /*
  * State of a RPMsg capture instance.
@@ -97,8 +97,10 @@ static int rpmsg_cam_read_msg(struct rpmsg_cam_handle *h, int exp_seq,
 		*data = msg->cap_hdr.data;
 		if (msg->cap_hdr.frm == BCAM_FRM_NONE)
 			return 0;
-		if (msg->cap_hdr.frm >= BCAM_FRM_INVALID)
+		if (msg->cap_hdr.frm >= BCAM_FRM_INVALID) {
+			log_trace("Received invalid frame section");
 			return -2;
+		}
 		if (msg->cap_hdr.seq != exp_seq) {
 			log_trace("Received unexpected RPMsg cap seq: %d instead of %d",
 					  msg->cap_hdr.seq, exp_seq);
@@ -304,10 +306,10 @@ int rpmsg_cam_get_frame(struct rpmsg_cam_frame* frame)
 						  data_len, h->img_sz);
 				return -2;
 			}
-			log_debug("Received start frame section");
 			memcpy(frame->pixels, data, data_len);
 			cnt = data_len;
 			seq = 1;
+			log_debug("Received start frame section %d (len=%d)", seq, data_len);
 			break;
 
 		case -1:

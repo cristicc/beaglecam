@@ -232,7 +232,7 @@ static void *acquire_frames(void *rpmsg_cam_h)
 				continue; /* Ignore frame & sync errors */
 			}
 
-			log_debug("Received frame: seq=%d", frame_ring.buf[head]->seq);
+			log_info("Received frame: seq=%d", frame_ring.buf[head]->seq);
 
 			/* Finish writing data before incrementing head */
 			atomic_store_explicit(&frame_ring.writer, (head + 1) & (FRAME_RING_SIZE - 1),
