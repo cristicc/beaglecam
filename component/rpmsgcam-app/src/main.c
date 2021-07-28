@@ -163,7 +163,7 @@ static int setup_signal_handler()
 		return ret;
 	}
 
-    ret = sigaction(SIGINT, &sa, NULL);
+	ret = sigaction(SIGINT, &sa, NULL);
 	if (ret != 0)
 		log_error("Failed to setup signal handler: %s", strerror(errno));
 
@@ -467,13 +467,18 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
+	if (options.cam_xres * options.cam_yres > BCAM_FRAME_LEN_MAX / 2) {
+		fprintf(stderr, "Camera supported maximum resolution is 640x480 or equivalent.\n");
+		exit(EXIT_FAILURE);
+	}
+
 	/* Set log level */
 	log_set_level(options.log_level);
 
 	log_info("Starting rpmsgcam app");
 
 	/* Setup the signal handler for stopping app gracefully */
-    setup_signal_handler();
+	setup_signal_handler();
 
 	/* Configure the OV7670 Camera Module via the I2C-like interface */
 	if (options.cam_dev[0] != '-') {
