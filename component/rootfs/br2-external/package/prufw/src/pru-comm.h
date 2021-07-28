@@ -13,12 +13,6 @@
 /* Local address of the PRU shared RAM */
 #define SHARED_MEM_ADDR			0x10000
 
-/* PRU1-to-PRU0 irq (shared unused RPMsg irq defined as 'kick' in Linux DT) */
-#define PRU1_PRU0_INTERRUPT		17
-
-/* PRU0-to-PRU1 irq (TODO: define 'xfer' in the Linux DT) */
-#define PRU0_PRU1_INTERRUPT		20
-
 /* PRU cores run at 200 MHz */
 #define PRU_CYCLES_PER_USEC		200
 
@@ -42,10 +36,10 @@ enum pru_cmd_id {
  * Currently used only for sending commands from PRU1 to PRU0.
  */
 struct shared_mem {
-	struct pru_cmd pru0_cmd;	/* Command sent from PRU1 to PRU0 */
-	struct pru_cmd pru1_cmd;	/* Command sent from PRU0 to PRU1 */
+	volatile struct pru_cmd pru0_cmd; /* Command sent from PRU1 to PRU0 */
+	volatile struct pru_cmd pru1_cmd; /* Command sent from PRU0 to PRU1 */
 
-	struct {
+	volatile struct {
 		uint16_t xres;		/* Image X resolution */
 		uint16_t yres;		/* Image Y resolution */
 		uint8_t bpp;		/* Bits per pixel */
@@ -53,6 +47,9 @@ struct shared_mem {
 		uint32_t img_sz;	/* xres * yres * bpp */
 	} cap_config;
 };
+
+/* Helper to access PRU shared RAM */
+#define SMEM	(*((volatile struct shared_mem *)SHARED_MEM_ADDR))
 
 /*
  * Data captured from camera module by PRU0 and XFER-ed to PRU1.
@@ -86,13 +83,13 @@ struct cap_data {
 #define NEXT_BANK(bank_no)		(bank_no) = (bank_no) == 2 ? 0 : (bank_no) + 1
 
 /*
- * PRU sleep helpers
+ * PRU sleep helpers.
  */
 #define USLEEP(usec)			__delay_cycles(PRU_CYCLES_PER_USEC * (usec))
 #define MSLEEP(msec)			USLEEP(1000 * (msec))
 
 /*
- * PRU IO helpers
+ * PRU IO helpers.
  */
 #define HIGH				1
 #define LOW				0

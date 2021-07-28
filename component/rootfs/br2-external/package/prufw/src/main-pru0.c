@@ -32,35 +32,50 @@
 
 #define PRU0
 
-volatile register uint32_t __R30;
 volatile register uint32_t __R31;
 
-/* Shared memory used for inter-PRU communication */
-volatile struct shared_mem *smem = (struct shared_mem *)SHARED_MEM_ADDR;
-
-/* Host-0 interrupt sets bit 30 in register R31 */
-#define HOST_INT			((uint32_t)1 << 30)
+/* Global data */
+static struct cap_data frm_data;
+static uint8_t capture_started;
+static uint8_t crt_bank;
 
 /*
  * Checks for commands from PRU1.
  * Returns the received command ID.
  */
 uint8_t check_pru1_cmd() {
-	uint8_t id;
+	static uint8_t id;
 
-	/* Bit R31.30 is set when PRU1 triggered PRU1_PRU0_INTERRUPT */
-	if (__R31 & HOST_INT == 0)
-		return PRU_CMD_NONE;
+	/* Check SMEM for new command from PRU1 */
+	id = SMEM.pru0_cmd.id;
+	if (id == PRU_CMD_NONE)
+		return id;
 
-	/* Clear the status of the interrupt */
-	CT_INTC.SICR_bit.STS_CLR_IDX = PRU1_PRU0_INTERRUPT;
+	/* Clear SMEM */
+	SMEM.pru0_cmd.id = PRU_CMD_NONE;
 
-	/* Get command ID and clear smem */
-	id = smem->pru0_cmd.id;
-	smem->pru0_cmd.id = PRU_CMD_NONE;
+	switch (id) {
+	case PRU_CMD_CAP_START:
+		capture_started = 1;
+		crt_bank = 0;
+		/* Invalidate content of scratch pad banks */
+		frm_data.seq = 0;
+		frm_data.len = 0;
+		STORE_DATA(0, frm_data);
+		STORE_DATA(1, frm_data);
+		STORE_DATA(2, frm_data);
+		break;
 
-	/* Acknoledge command on PRU1 */
-	smem->pru1_cmd.id = PRU_CMD_ACK;
+	case PRU_CMD_CAP_STOP:
+		capture_started = 0;
+		break;
+
+	default:
+		id = PRU_CMD_NONE;
+	}
+
+	/* Send ACK command to PRU1 */
+	SMEM.pru1_cmd.id = PRU_CMD_ACK;
 
 	return id;
 }
@@ -68,14 +83,14 @@ uint8_t check_pru1_cmd() {
 /*
  * Generates test RGB565 pixels stored in BGR (little endian) format.
  *
- * Returns 1 if PRU_CMD_CAP_STOP interrupted the data generation process,
- * otherwise 0.
+ * Returns 1 if a PRU_CMD_CAP_* command interrupted the data generation process,
+ * otherwise the return code is 0.
  */
 uint8_t generate_test_data(struct cap_data *buf)
 {
-	uint32_t img_part_size = smem->cap_config.img_sz / 3;
+	uint32_t img_part_size = SMEM.cap_config.img_sz / 3;
 	uint32_t img_part_off = buf->seq * sizeof(buf->data);
-	uint8_t iter = 0, ret = 0;
+	uint8_t iter = 0;
 
 	while (iter < sizeof(buf->data)) {
 		if (img_part_off < img_part_size) {
@@ -99,17 +114,14 @@ uint8_t generate_test_data(struct cap_data *buf)
 		USLEEP(2);
 
 		/* Process command from PRU1 */
-		if (check_pru1_cmd() == PRU_CMD_CAP_STOP) {
-			ret = 1;
-			break;
-		}
+		if (check_pru1_cmd() != PRU_CMD_NONE)
+			return 1;
 
 		img_part_off += 2;
 	}
 
 	buf->len = iter;
-
-	return ret;
+	return 0;
 }
 
 /*
@@ -117,64 +129,48 @@ uint8_t generate_test_data(struct cap_data *buf)
  */
 void main(void)
 {
-	struct cap_data buf;
-	uint8_t capture_started = 0;
-	uint8_t crt_bank;
-
 	/* Clear the status of all interrupts */
 	CT_INTC.SECR0 = 0xFFFFFFFF;
 	CT_INTC.SECR1 = 0xFFFFFFFF;
 
-	buf.pad = 0;
+	/* Init data */
+	frm_data.pad = 0;
+	capture_started = 0;
 
 	while (1) {
 		/* Process command from PRU1 */
-		switch (check_pru1_cmd()) {
-		case PRU_CMD_CAP_START:
-			buf.seq = 0;
-			crt_bank = 0;
-			capture_started = 1;
-			break;
-		case PRU_CMD_CAP_STOP:
-			capture_started = 0;
-			break;
-		}
+		check_pru1_cmd();
 
 		if (capture_started == 0)
 			continue;
 
-		if (smem->cap_config.test_mode != 0) {
-			if (generate_test_data(&buf) != 0) {
-				capture_started = 0;
+		if (SMEM.cap_config.test_mode != 0) {
+			if (frm_data.seq == 0)
+				USLEEP(1000);
+			if (generate_test_data(&frm_data) != 0)
 				continue;
-			}
 		} else {
 			//TODO: get data from camera module
 		}
 
-		buf.seq++;
+		frm_data.seq++;
 
 		/*
-		 * Store captured data in the current scratch pad bank. Note the
-		 * switch is necessary for "error #664: expected an integer constant".
+		 * Store captured data in the current scratch pad bank.
+		 * Note using the switch statement as workaround for:
+		 * "error #664: expected an integer constant"
 		 */
 		switch (crt_bank) {
 		case 0:
-			STORE_DATA(0, buf);
+			STORE_DATA(0, frm_data);
 			break;
 		case 1:
-			STORE_DATA(1, buf);
+			STORE_DATA(1, frm_data);
 			break;
 		case 2:
-			STORE_DATA(2, buf);
+			STORE_DATA(2, frm_data);
 			break;
 		}
-
-		/*
-		 * Trigger interrupt on PRU1, see ARM335x TRM section:
-		 * Event Interface Mapping (R31): PRU System Events
-		 */
-		__R31 = PRU0_PRU1_INTERRUPT + 16;
 
 		/* Move to next scratch bank */
 		NEXT_BANK(crt_bank);
