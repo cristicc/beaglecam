@@ -53,28 +53,30 @@ void loop() {
   if (digitalRead(PIN_START) == LOW) {
     print_msg("Please start BBB");
     Serial.println("Waiting for BBB to start");
-    while ((digitalRead(PIN_START)) == LOW);
+    while (digitalRead(PIN_START) == LOW);
   }
 
   /* Waiting for BBB reset (SYS_RESETn PIN turns LOW when RST pressed) */
   print_msg("Please reset BBB");
   Serial.println("Waiting while SYS_RESETn is HIGH");
-  while ((digitalRead(PIN_START)) == HIGH);
+  while (digitalRead(PIN_START) == HIGH);
+
+wait_reset:
   Serial.println("Waiting while SYS_RESETn is LOW");
-  while ((digitalRead(PIN_START)) == LOW);
+  while (digitalRead(PIN_START) == LOW);
 
   print_msg("Booting BBB...");
   Serial.println("Starting counter");
   start_time = millis();
 
-  /* Waiting for BBB boot completion */
-  while ((digitalRead(PIN_STOP)) == LOW) {
+  /* Waiting for BBB boot completion or reset */
+  while (digitalRead(PIN_STOP) == LOW) {
     elapsed = millis() - start_time;
     print_time(elapsed);
-    delay(100);
 
-    /* Check for a possible BBB reset */
-    if (digitalRead(PIN_START) == LOW && elapsed > 500)
-       break;
+    delay(1);
+
+    if (digitalRead(PIN_START) == LOW)
+      goto wait_reset;
   }
 }
