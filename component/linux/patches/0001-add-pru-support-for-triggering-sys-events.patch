@@ -12,8 +12,8 @@ Signed-off-by: Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 
 diff --git a/drivers/irqchip/irq-pruss-intc.c b/drivers/irqchip/irq-pruss-intc.c
 index 92fb578..eada3ee 100644
---- a/./drivers/irqchip/irq-pruss-intc.c.orig
-+++ b/./drivers/irqchip/irq-pruss-intc.c
+--- a/drivers/irqchip/irq-pruss-intc.c
++++ b/drivers/irqchip/irq-pruss-intc.c
 @@ -311,6 +311,47 @@ static void pruss_intc_irq_unmask(struct irq_data *data)
  	pruss_intc_write_reg(intc, PRU_INTC_EISR, hwirq);
  }

@@ -898,77 +898,8 @@ should be addressed sooner or later:
 indicated by the blue LED. Please note this functionality is currently only
 available for `dev` build profile.
 
-* The optimized kernel (built via `prod` profile) crashes with the following oops:
-+
-----
-[    0.824682] Unhandled fault: external abort on non-linefetch (0x1008) at 0xe0066000
-[    0.832558] pgd = (ptrval)
-[    0.835338] [e0066000] *pgd=8082f811, *pte=4a326653, *ppte=4a326453
-[    0.841797] Internal error: Oops - BUG: 1008 [#1] THUMB2
-[    0.847260] Modules linked in:
-[    0.850400] CPU: 0 PID: 9 Comm: kworker/0:1 Not tainted 5.11.11 #30
-[    0.856847] Hardware name: Generic AM33XX (Flattened Device Tree)
-[    0.863117] Workqueue: events deferred_probe_work_func
-[    0.868416] PC is at sysc_probe+0x93e/0xd2c
-[    0.872724] LR is at omap_reset_deassert+0x137/0x168
-[    0.877841] pc : [<c01d3772>]    lr : [<c0202db7>]    psr: 40000033
-[    0.884283] sp : c09159a8  ip : 00026000  fp : c06b1b98
-[    0.889653] r10: 00000001  r9 : c03138f4  r8 : c0ddb210
-[    0.895024] r7 : c0313d94  r6 : c06b1b98  r5 : 00000000  r4 : c0dd8d40
-[    0.901735] r3 : e0040000  r2 : e0066000  r1 : 00000000  r0 : 00000000
-[    0.908447] Flags: nZcv  IRQs on  FIQs on  Mode SVC_32  ISA Thumb  Segment none
-[    0.915966] Control: 50c5387d  Table: 80004019  DAC: 00000051
-[...]
-[    1.361853] [<c01d3772>] (sysc_probe) from [<c0268669>] (platform_probe+0x3d/0x74)
-[    1.369656] [<c0268669>] (platform_probe) from [<c02672ad>] (really_probe+0xed/0x25c)
-[    1.377720] [<c02672ad>] (really_probe) from [<c0267469>] (driver_probe_device+0x4d/0x70)
-[    1.386138] [<c0267469>] (driver_probe_device) from [<c02661ff>] (bus_for_each_drv+0x23/0x54)
-[    1.394926] [<c02661ff>] (bus_for_each_drv) from [<c0267163>] (__device_attach+0x67/0xc0)
-[    1.403346] [<c0267163>] (__device_attach) from [<c026698b>] (bus_probe_device+0x17/0x58)
-[    1.411763] [<c026698b>] (bus_probe_device) from [<c0264d73>] (device_add+0x3fb/0x574)
-[    1.419916] [<c0264d73>] (device_add) from [<c02d20fd>] (of_platform_device_create_pdata+0x6d/0x8c)
-[    1.429231] [<c02d20fd>] (of_platform_device_create_pdata) from [<c02d2207>] (of_platform_bus_create+0xe3/0x148)
-[    1.439706] [<c02d2207>] (of_platform_bus_create) from [<c02d233f>] (of_platform_populate+0x47/0x80)
-[    1.449108] [<c02d233f>] (of_platform_populate) from [<c01d1d37>] (simple_pm_bus_probe+0x23/0x28)
-[    1.458241] [<c01d1d37>] (simple_pm_bus_probe) from [<c0268669>] (platform_probe+0x3d/0x74)
-[    1.466837] [<c0268669>] (platform_probe) from [<c02672ad>] (really_probe+0xed/0x25c)
-[    1.474897] [<c02672ad>] (really_probe) from [<c0267469>] (driver_probe_device+0x4d/0x70)
-[    1.483313] [<c0267469>] (driver_probe_device) from [<c02661ff>] (bus_for_each_drv+0x23/0x54)
-[    1.492093] [<c02661ff>] (bus_for_each_drv) from [<c0267163>] (__device_attach+0x67/0xc0)
-[    1.500512] [<c0267163>] (__device_attach) from [<c026698b>] (bus_probe_device+0x17/0x58)
-[    1.508930] [<c026698b>] (bus_probe_device) from [<c0264d73>] (device_add+0x3fb/0x574)
-[    1.517081] [<c0264d73>] (device_add) from [<c02d20fd>] (of_platform_device_create_pdata+0x6d/0x8c)
-[    1.526395] [<c02d20fd>] (of_platform_device_create_pdata) from [<c02d2207>] (of_platform_bus_create+0xe3/0x148)
-[    1.536871] [<c02d2207>] (of_platform_bus_create) from [<c02d233f>] (of_platform_populate+0x47/0x80)
-[    1.546272] [<c02d233f>] (of_platform_populate) from [<c01d1d37>] (simple_pm_bus_probe+0x23/0x28)
-[    1.555406] [<c01d1d37>] (simple_pm_bus_probe) from [<c0268669>] (platform_probe+0x3d/0x74)
-[    1.564004] [<c0268669>] (platform_probe) from [<c02672ad>] (really_probe+0xed/0x25c)
-[    1.572064] [<c02672ad>] (really_probe) from [<c0267469>] (driver_probe_device+0x4d/0x70)
-[    1.580482] [<c0267469>] (driver_probe_device) from [<c02661ff>] (bus_for_each_drv+0x23/0x54)
-[    1.589260] [<c02661ff>] (bus_for_each_drv) from [<c0267163>] (__device_attach+0x67/0xc0)
-[    1.597680] [<c0267163>] (__device_attach) from [<c026698b>] (bus_probe_device+0x17/0x58)
-[    1.606097] [<c026698b>] (bus_probe_device) from [<c0264d73>] (device_add+0x3fb/0x574)
-[    1.614249] [<c0264d73>] (device_add) from [<c02d20fd>] (of_platform_device_create_pdata+0x6d/0x8c)
-[    1.623561] [<c02d20fd>] (of_platform_device_create_pdata) from [<c02d2207>] (of_platform_bus_create+0xe3/0x148)
-[    1.634034] [<c02d2207>] (of_platform_bus_create) from [<c02d233f>] (of_platform_populate+0x47/0x80)
-[    1.643435] [<c02d233f>] (of_platform_populate) from [<c01d1d37>] (simple_pm_bus_probe+0x23/0x28)
-[    1.652566] [<c01d1d37>] (simple_pm_bus_probe) from [<c0268669>] (platform_probe+0x3d/0x74)
-[    1.661163] [<c0268669>] (platform_probe) from [<c02672ad>] (really_probe+0xed/0x25c)
-[    1.669223] [<c02672ad>] (really_probe) from [<c0267469>] (driver_probe_device+0x4d/0x70)
-[    1.677642] [<c0267469>] (driver_probe_device) from [<c02661ff>] (bus_for_each_drv+0x23/0x54)
-[    1.686419] [<c02661ff>] (bus_for_each_drv) from [<c0267163>] (__device_attach+0x67/0xc0)
-[    1.694837] [<c0267163>] (__device_attach) from [<c026698b>] (bus_probe_device+0x17/0x58)
-[    1.703255] [<c026698b>] (bus_probe_device) from [<c0266cb9>] (deferred_probe_work_func+0x45/0x68)
-[    1.712476] [<c0266cb9>] (deferred_probe_work_func) from [<c011f6db>] (process_one_work+0x10b/0x1e0)
-[    1.721887] [<c011f6db>] (process_one_work) from [<c011fd9d>] (worker_thread+0x18d/0x28c)
-[    1.730308] [<c011fd9d>] (worker_thread) from [<c01232b9>] (kthread+0xd1/0xe0)
-[    1.737746] [<c01232b9>] (kthread) from [<c0100159>] (ret_from_fork+0x11/0x38)
-----
-A preliminary investigation suggests a bug in TI sysc interconnect target
-driver (ti-sysc) triggered by enabling the PRUSS related functionality in DTS.
-+
-The temporary workaround was to enable CONFIG_SMP, although it still exposes
-the issue in more than 50% of the reboot tests.
+* U-Boot crashes when trying to enable Falcon mode with `zImage` kernel format.
+The workaround is to use the legacy `uImage` format instead.
 
 
 == Further development

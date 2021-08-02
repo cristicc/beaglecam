@@ -16,8 +16,8 @@ Signed-off-by: Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 
 diff --git a/drivers/remoteproc/pru_rproc.c b/drivers/remoteproc/pru_rproc.c
 index 2667919..51b1aa4 100644
---- a/./drivers/remoteproc/pru_rproc.c.orig
-+++ b/./drivers/remoteproc/pru_rproc.c
+--- a/drivers/remoteproc/pru_rproc.c
++++ b/drivers/remoteproc/pru_rproc.c
 @@ -12,6 +12,7 @@
  
  #include <linux/bitops.h>

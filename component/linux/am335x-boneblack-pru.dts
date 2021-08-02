@@ -163,6 +163,9 @@
 &pruss_tm {
 	status = "okay";
 
+	reg = <0x326004 0x4>;
+	reg-names = "sysc";
+
 	pruss: pruss@0 {
 		compatible = "ti,am3356-pruss";
 		reg = <0x0 0x80000>;
