@@ -25,7 +25,11 @@ endif::[]
 
 toc::[]
 
-IMPORTANT: This is currently a work in progress..
+[IMPORTANT]
+This is currently a work in progress. Because the support for the camera module
+is not implemented yet, the images displayed on the LCD are generated in
+real-time from the PRU firmware.
+
 
 == Intro
 
@@ -76,8 +80,8 @@ same pixel clock frequency (1 MHz) as the real camera module.
 [NOTE]
 In the diagram below, the blocks with rounded corners (uncolored) are hardware
 components, while those with square corners (colored) are software components.
-The blue colored blocks represent the custom software components developed
-specifically for this project.
+The blue colored blocks represent the custom software components developed in
+the context of this project.
 
 ifdef::env-github[]
 image::components-overview.svg[]
@@ -164,14 +168,13 @@ messages with different types of content: information, logs, image data.
 [NOTE]
 The PRUs firmware source code location is: `component/rootfs/br2-external/package/prufw`
 
-PRU Pins::
+PRU pins for capturing camera frames via `D0-D7`, `PCLK`, `HREF` and `VSYNC`::
 
 There are 16 input pins (and 16 output) pins per PRU core, but not all of these
 are accessible on the BeagleBone Black. Additionally, some of them are already
-in use by the LCD cape, hence we can only access less than half of the inputs
-(see the table below for more details about the available pins).
+in use by the LCD cape, hence we can only access less than half of the inputs,
+as indicated in the following table:
 
-.BeagleBone PRU input pins for capturing camera frames via `D0-D7`, `PCLK`, `HREF` and `VSYNC`
 |===
 | PRU# | R31 bit | BB Header | BB Pin Name | ZCZ BallName  | Pinmux Mode | Cam Pin Name | Comments
 
@@ -264,7 +267,7 @@ NOTE: The source code location is: `component/rpmsgcam-drv`
 
 This is the user-space application responsible for:
 
-* Reading messages from the rpmsg_ character device
+* Reading messages from the _rpmsg_ character device
 * Filtering, validating and assembling image frames
 * Displaying the images on the 4.3" LCD via Linux Frame Buffer
 * Signaling the receiving of the first frame via GPIO
@@ -363,7 +366,6 @@ Main targets:
   distclean              Delete all non-source files (including downloads).
   reconfigure            Rebuild all project components from the configure step.
   rebuild                Rebuild all project components.
-
 [...]
 ----
 
@@ -796,8 +798,11 @@ $ cd {PROD_OUTPUT_DIR}
 $ make
 
 Once the bootable SD card image has been generated, follow <<prepare-usd>> section
-and boot the device, but stop at the U-Boot prompt by pressing a key within the
-two seconds default autoboot delay:
+and boot the device.
+
+Note the Falcon mode is not yet active since it currently requires some manual
+steps. Hence, restart the device and stop at the U-Boot prompt by pressing a key
+within the two seconds default autoboot delay:
 
 [script,sh]
 ----
@@ -807,7 +812,7 @@ Hit any key to stop autoboot:  0
 =>
 ----
 
-Enter the following commands:
+Enter the following U-Boot commands:
 
 [script,sh]
 ----
@@ -840,32 +845,137 @@ WARN: FDT size > CMD_SPL_WRITE_SIZE
 Saving Environment to FAT... OK
 ----
 
-Now restart the board, either from the RESET button or from U-Boot console:
+U-Boot Falcon mode should be enabled now. Restart the board, either from the
+RESET button or from U-Boot console.
 
 [script,sh]
 ----
 => reset
 resetting ...
-
-U-Boot SPL 2021.01 (Jul 23 2021 - 13:41:15 +0000)
-Trying to boot from MMC1
-spl: falcon_args_file not set in environment, falling back to default
-Starting PRUs
-Starting rpmsgcam-app
-1970-01-01 00:00:00.282 INFO  main.c:499: Initializing PRUs for 160x120 frame acquisition
-[...]
-1970-01-01 00:00:00.283 INFO  PRU:1: Capture initiated
-[...]
-1970-01-01 00:00:00.379 INFO  main.c:333: Signaled GPIO line: 31
-[...]
-1970-01-01 00:00:00.471 INFO  PRU:1: Capture stopped
-1970-01-01 00:00:00.472 INFO  main.c:185: Frame acquire stats: total=1, dropped=0, discarded=0, rpmsgerr=0
 ----
+
+Note the first image frame should be displayed pretty fast, in 1.38 seconds
+when using QQVGA format (160 x 120 pixels). As a matter of fact, the whole
+process from starting U-Boot up to having the first frame presented takes only
+about 0.93 seconds, as measured by _grabserial_ utility:
+
+[script,sh]
+----
+$ grabserial -d /dev/ttyUSB0 -m "U-Boot SPL" -t -e 15 -q "Signaled GPIO line"
+[0.000000 0.000000]
+[0.000360 0.000360] U-Boot SPL 2021.01 (Jul 27 2021 - 10:22:42 +0000)
+[...]
+[0.824597 0.752278] Starting PRUs
+[0.828184 0.003587] Probing camera drv
+[0.841115 0.012931] Starting camera app
+[0.842883 0.001768] 1970-01-01 00:00:00.281 INFO  main.c:478: Starting rpmsgcam app
+[0.850157 0.007274] 1970-01-01 00:00:00.282 INFO  main.c:495: Initializing LCD frame buffer
+[0.858099 0.007941] 1970-01-01 00:00:00.282 INFO  fb.c:43: FB screen info: 480x272, 16bpp, xoff=0, yoff=0
+[0.867241 0.009143] 1970-01-01 00:00:00.282 INFO  main.c:504: Initializing PRUs for 160x120 frame acquisition
+[0.876745 0.009503] 1970-01-01 00:00:00.282 INFO  PRU:1: Capture configured
+[...]
+[0.891593 0.008242] 1970-01-01 00:00:00.283 INFO  gpio-util.c:62: Configured GPIO line 31 as output (line name: P9_13 [uart4_txd])
+[0.902957 0.011364] 1970-01-01 00:00:00.283 INFO  main.c:201: Starting frames acquisition thread
+[0.911321 0.008364] 1970-01-01 00:00:00.284 INFO  PRU:1: Capture initiated
+[0.917826 0.006505] 1970-01-01 00:00:00.284 INFO  main.c:300: Starting FB display thread
+[0.925472 0.007646] 1970-01-01 00:00:00.339 INFO  main.c:235: Received frame: seq=0
+[0.932735 0.007263] 1970-01-01 00:00:00.339 INFO  main.c:333: Signaled GPIO line
+[...]
+----
+
+[WARNING]
+For some reason it takes around 0.45 seconds to perform the hardware reset and
+run the ROM code that loads and starts U-Boot SPL. I'm not sure this is a
+hardware fault or just normal and expected behavior.
+
+
+== Known issues
+
+Although this is still work in progress, there are a number of issues that
+should be addressed sooner or later:
+
+* Software shut down is not working properly, the board remains powered on as
+indicated by the blue LED. Please note this functionality is currently only
+available for `dev` build profile.
+
+* The optimized kernel (built via `prod` profile) crashes with the following oops:
++
+----
+[    0.824682] Unhandled fault: external abort on non-linefetch (0x1008) at 0xe0066000
+[    0.832558] pgd = (ptrval)
+[    0.835338] [e0066000] *pgd=8082f811, *pte=4a326653, *ppte=4a326453
+[    0.841797] Internal error: Oops - BUG: 1008 [#1] THUMB2
+[    0.847260] Modules linked in:
+[    0.850400] CPU: 0 PID: 9 Comm: kworker/0:1 Not tainted 5.11.11 #30
+[    0.856847] Hardware name: Generic AM33XX (Flattened Device Tree)
+[    0.863117] Workqueue: events deferred_probe_work_func
+[    0.868416] PC is at sysc_probe+0x93e/0xd2c
+[    0.872724] LR is at omap_reset_deassert+0x137/0x168
+[    0.877841] pc : [<c01d3772>]    lr : [<c0202db7>]    psr: 40000033
+[    0.884283] sp : c09159a8  ip : 00026000  fp : c06b1b98
+[    0.889653] r10: 00000001  r9 : c03138f4  r8 : c0ddb210
+[    0.895024] r7 : c0313d94  r6 : c06b1b98  r5 : 00000000  r4 : c0dd8d40
+[    0.901735] r3 : e0040000  r2 : e0066000  r1 : 00000000  r0 : 00000000
+[    0.908447] Flags: nZcv  IRQs on  FIQs on  Mode SVC_32  ISA Thumb  Segment none
+[    0.915966] Control: 50c5387d  Table: 80004019  DAC: 00000051
+[...]
+[    1.361853] [<c01d3772>] (sysc_probe) from [<c0268669>] (platform_probe+0x3d/0x74)
+[    1.369656] [<c0268669>] (platform_probe) from [<c02672ad>] (really_probe+0xed/0x25c)
+[    1.377720] [<c02672ad>] (really_probe) from [<c0267469>] (driver_probe_device+0x4d/0x70)
+[    1.386138] [<c0267469>] (driver_probe_device) from [<c02661ff>] (bus_for_each_drv+0x23/0x54)
+[    1.394926] [<c02661ff>] (bus_for_each_drv) from [<c0267163>] (__device_attach+0x67/0xc0)
+[    1.403346] [<c0267163>] (__device_attach) from [<c026698b>] (bus_probe_device+0x17/0x58)
+[    1.411763] [<c026698b>] (bus_probe_device) from [<c0264d73>] (device_add+0x3fb/0x574)
+[    1.419916] [<c0264d73>] (device_add) from [<c02d20fd>] (of_platform_device_create_pdata+0x6d/0x8c)
+[    1.429231] [<c02d20fd>] (of_platform_device_create_pdata) from [<c02d2207>] (of_platform_bus_create+0xe3/0x148)
+[    1.439706] [<c02d2207>] (of_platform_bus_create) from [<c02d233f>] (of_platform_populate+0x47/0x80)
+[    1.449108] [<c02d233f>] (of_platform_populate) from [<c01d1d37>] (simple_pm_bus_probe+0x23/0x28)
+[    1.458241] [<c01d1d37>] (simple_pm_bus_probe) from [<c0268669>] (platform_probe+0x3d/0x74)
+[    1.466837] [<c0268669>] (platform_probe) from [<c02672ad>] (really_probe+0xed/0x25c)
+[    1.474897] [<c02672ad>] (really_probe) from [<c0267469>] (driver_probe_device+0x4d/0x70)
+[    1.483313] [<c0267469>] (driver_probe_device) from [<c02661ff>] (bus_for_each_drv+0x23/0x54)
+[    1.492093] [<c02661ff>] (bus_for_each_drv) from [<c0267163>] (__device_attach+0x67/0xc0)
+[    1.500512] [<c0267163>] (__device_attach) from [<c026698b>] (bus_probe_device+0x17/0x58)
+[    1.508930] [<c026698b>] (bus_probe_device) from [<c0264d73>] (device_add+0x3fb/0x574)
+[    1.517081] [<c0264d73>] (device_add) from [<c02d20fd>] (of_platform_device_create_pdata+0x6d/0x8c)
+[    1.526395] [<c02d20fd>] (of_platform_device_create_pdata) from [<c02d2207>] (of_platform_bus_create+0xe3/0x148)
+[    1.536871] [<c02d2207>] (of_platform_bus_create) from [<c02d233f>] (of_platform_populate+0x47/0x80)
+[    1.546272] [<c02d233f>] (of_platform_populate) from [<c01d1d37>] (simple_pm_bus_probe+0x23/0x28)
+[    1.555406] [<c01d1d37>] (simple_pm_bus_probe) from [<c0268669>] (platform_probe+0x3d/0x74)
+[    1.564004] [<c0268669>] (platform_probe) from [<c02672ad>] (really_probe+0xed/0x25c)
+[    1.572064] [<c02672ad>] (really_probe) from [<c0267469>] (driver_probe_device+0x4d/0x70)
+[    1.580482] [<c0267469>] (driver_probe_device) from [<c02661ff>] (bus_for_each_drv+0x23/0x54)
+[    1.589260] [<c02661ff>] (bus_for_each_drv) from [<c0267163>] (__device_attach+0x67/0xc0)
+[    1.597680] [<c0267163>] (__device_attach) from [<c026698b>] (bus_probe_device+0x17/0x58)
+[    1.606097] [<c026698b>] (bus_probe_device) from [<c0264d73>] (device_add+0x3fb/0x574)
+[    1.614249] [<c0264d73>] (device_add) from [<c02d20fd>] (of_platform_device_create_pdata+0x6d/0x8c)
+[    1.623561] [<c02d20fd>] (of_platform_device_create_pdata) from [<c02d2207>] (of_platform_bus_create+0xe3/0x148)
+[    1.634034] [<c02d2207>] (of_platform_bus_create) from [<c02d233f>] (of_platform_populate+0x47/0x80)
+[    1.643435] [<c02d233f>] (of_platform_populate) from [<c01d1d37>] (simple_pm_bus_probe+0x23/0x28)
+[    1.652566] [<c01d1d37>] (simple_pm_bus_probe) from [<c0268669>] (platform_probe+0x3d/0x74)
+[    1.661163] [<c0268669>] (platform_probe) from [<c02672ad>] (really_probe+0xed/0x25c)
+[    1.669223] [<c02672ad>] (really_probe) from [<c0267469>] (driver_probe_device+0x4d/0x70)
+[    1.677642] [<c0267469>] (driver_probe_device) from [<c02661ff>] (bus_for_each_drv+0x23/0x54)
+[    1.686419] [<c02661ff>] (bus_for_each_drv) from [<c0267163>] (__device_attach+0x67/0xc0)
+[    1.694837] [<c0267163>] (__device_attach) from [<c026698b>] (bus_probe_device+0x17/0x58)
+[    1.703255] [<c026698b>] (bus_probe_device) from [<c0266cb9>] (deferred_probe_work_func+0x45/0x68)
+[    1.712476] [<c0266cb9>] (deferred_probe_work_func) from [<c011f6db>] (process_one_work+0x10b/0x1e0)
+[    1.721887] [<c011f6db>] (process_one_work) from [<c011fd9d>] (worker_thread+0x18d/0x28c)
+[    1.730308] [<c011fd9d>] (worker_thread) from [<c01232b9>] (kthread+0xd1/0xe0)
+[    1.737746] [<c01232b9>] (kthread) from [<c0100159>] (ret_from_fork+0x11/0x38)
+----
+A preliminary investigation suggests a bug in TI sysc interconnect target
+driver (ti-sysc) triggered by enabling the PRUSS related functionality in DTS.
++
+The temporary workaround was to enable CONFIG_SMP, although it still exposes
+the issue in more than 50% of the reboot tests.
 
 
 == Further development
 
-* Add v4l2 support to the RPMsg camera module Linux kernel driver
+* Add v4l2 support to the Linux kernel camera driver, to facilitate integration
+with 3rd-party applications (e.g. ffmpeg, mpv)
+
 * Add support for additional boards (e.g. RaspberryPi, BeagleV)
 
 
