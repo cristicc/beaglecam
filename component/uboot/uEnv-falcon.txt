@@ -1,5 +1,5 @@
 rpmsgcam-app-args=-x 160 -y 120
-set_bootargs=setenv bootargs console=ttyS0,115200n8 lpj=4980736 usbcore.autosuspend=-1 -- ${rpmsgcam-app-args}
+set_bootargs=setenv bootargs console=ttyS0,115200n8 lpj=4980736 mitigations=off -- ${rpmsgcam-app-args}
 loadimage=load mmc 0:1 ${loadaddr} uImage
 loadfdt=load mmc 0:1 ${fdtaddr} am335x-boneblack-pru.dtb
 splexport=spl export fdt ${loadaddr} - ${fdtaddr}; fatwrite mmc 0:1 ${fdtargsaddr} args ${fdtargslen}
