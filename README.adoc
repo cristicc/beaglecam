@@ -58,10 +58,10 @@ Current boot time measurements::
 |===
 | Image Format | Resolution | Boot time (s) | Comments
 
-| CUSTOM       |  80 x  60  | 1.345         | Using <<realtime-test-img>>
-| QQVGA        | 160 x 120  | 1.380         | Using <<realtime-test-img>>
-| QVGA         | 320 x 240  | 1.510         | Using <<realtime-test-img>>
-| CIF          | 352 x 288  | 1.570         | Using <<realtime-test-img>>
+| CUSTOM       |  80 x  60  | 1.230         | Using <<realtime-test-img>>
+| QQVGA        | 160 x 120  | 1.265         | Using <<realtime-test-img>>
+| QVGA         | 320 x 240  | 1.400         | Using <<realtime-test-img>>
+| CIF          | 352 x 288  | 1.455         | Using <<realtime-test-img>>
 |===
 
 [NOTE]
@@ -250,7 +250,19 @@ endif::[]
 
 === Software components
 
-==== RPMsg Camera Driver
+==== Linux kernel
+
+The mainline Linux kernel (currently v5.11), with additional PRU related patches
+adding support for:
+
+* Triggering an interrupt by signaling a specific PRU system event
+* The optional rpmsg stack using the virtio-ring based communication transport
+between MPU and a PRU core
+
+NOTE: The kernel patches location is: `component/linux/patches`
+
+
+==== RPMsg camera driver
 
 This is the Linux kernel module responsible for providing a communication
 interface between user space applications and PRU cores firmware.
@@ -263,7 +275,7 @@ facilitate integration with 3rd-party applications (e.g. ffmpeg, mpv).
 NOTE: The source code location is: `component/rpmsgcam-drv`
 
 
-==== RPMsg Camera Application
+==== RPMsg camera application
 
 This is the user-space application responsible for:
 
@@ -713,20 +725,25 @@ the indicated no. of frames.
 [source,sh]
 ----
 root@beaglecam:~# rpmsgcam-app -l 3 -x 320 -y 240 -c - -f /dev/fb0 -r /dev/rpmsgcam31 -m 1
-1970-01-01 12:33:47.713 INFO  main.c:409: Starting rpmsgcam app
-1970-01-01 12:33:47.714 INFO  main.c:426: Initializing LCD frame buffer
-1970-01-01 12:33:47.714 INFO  fb.c:51: FB screen info: 480x272, 16bpp, xoff=0, yoff=0
-1970-01-01 12:33:47.715 INFO  main.c:435: Initializing PRUs for 320x240 frame acquisition
-1970-01-01 12:33:47.716 INFO  PRU:1: Capture configured
-1970-01-01 12:33:47.718 INFO  main.c:167: Starting frames acquisition thread
-1970-01-01 12:33:47.719 INFO  PRU:1: Capture started
-1970-01-01 12:33:47.719 INFO  main.c:255: Starting FB display thread
-1970-01-01 12:33:47.899 INFO  main.c:293: Reached max allowed no. of frames: 1
-1970-01-01 12:33:47.900 INFO  main.c:238: Stopping FB display thread
-1970-01-01 12:33:47.901 INFO  main.c:242: Frame display stats: fps=5.6, cnt=1
-1970-01-01 12:33:48.718 INFO  main.c:473: Stopping rpmsgcam app
-1970-01-01 12:33:48.719 INFO  main.c:153: Stopping frames acquisition thread
-1970-01-01 12:33:48.720 INFO  PRU:1: Capture stopped
+1970-01-01 00:00:00.310 INFO  main.c:478: Starting rpmsgcam app
+1970-01-01 00:00:00.310 INFO  main.c:495: Initializing LCD frame buffer
+1970-01-01 00:00:00.310 INFO  fb.c:43: FB screen info: 480x272, 16bpp, xoff=0, yoff=0
+1970-01-01 00:00:00.310 INFO  main.c:504: Initializing PRUs for 320x240 frame acquisition
+1970-01-01 00:00:00.311 INFO  PRU:1: Capture configured
+1970-01-01 00:00:00.311 INFO  main.c:515: Initializing GPIO output line: 31
+1970-01-01 00:00:00.311 INFO  gpio-util.c:62: Configured GPIO line 31 as output (line name: P9_13 [uart4_txd])
+1970-01-01 00:00:00.311 INFO  main.c:201: Starting frames acquisition thread
+1970-01-01 00:00:00.312 INFO  PRU:1: Capture initiated
+1970-01-01 00:00:00.312 INFO  main.c:300: Starting FB display thread
+1970-01-01 00:00:00.500 INFO  main.c:235: Received frame: seq=0
+1970-01-01 00:00:00.501 INFO  main.c:333: Signaled GPIO line: 31
+1970-01-01 00:00:00.502 INFO  main.c:344: Reached max allowed no. of frames: 1
+1970-01-01 00:00:00.502 INFO  main.c:281: Stopping FB display thread
+1970-01-01 00:00:00.502 INFO  main.c:285: Frame display stats: fps=5.3, cnt=1
+1970-01-01 00:00:00.512 INFO  main.c:554: Stopping rpmsgcam app
+1970-01-01 00:00:00.512 INFO  main.c:181: Stopping frames acquisition thread
+1970-01-01 00:00:00.689 INFO  PRU:1: Capture stopped
+1970-01-01 00:00:00.689 INFO  main.c:185: Frame acquire stats: total=1, dropped=0, discarded=0, rpmsgerr=0
 ----
 
 
@@ -854,39 +871,34 @@ RESET button or from U-Boot console.
 resetting ...
 ----
 
-Note the first image frame should be displayed pretty fast, in 1.38 seconds
+Note the first image frame should be displayed pretty fast, in ~1.2 seconds
 when using QQVGA format (160 x 120 pixels). As a matter of fact, the whole
 process from starting U-Boot up to having the first frame presented takes only
-about 0.93 seconds, as measured by _grabserial_ utility:
+~0.8 seconds, as measured by _grabserial_ utility:
 
 [script,sh]
 ----
 $ grabserial -d /dev/ttyUSB0 -m "U-Boot SPL" -t -e 15 -q "Signaled GPIO line"
 [0.000000 0.000000]
-[0.000360 0.000360] U-Boot SPL 2021.01 (Jul 27 2021 - 10:22:42 +0000)
+[0.000308 0.000307] U-Boot SPL 2021.01 (Jul 27 2021 - 10:22:42 +0000)
 [...]
-[0.824597 0.752278] Starting PRUs
-[0.828184 0.003587] Probing camera drv
-[0.841115 0.012931] Starting camera app
-[0.842883 0.001768] 1970-01-01 00:00:00.281 INFO  main.c:478: Starting rpmsgcam app
-[0.850157 0.007274] 1970-01-01 00:00:00.282 INFO  main.c:495: Initializing LCD frame buffer
-[0.858099 0.007941] 1970-01-01 00:00:00.282 INFO  fb.c:43: FB screen info: 480x272, 16bpp, xoff=0, yoff=0
-[0.867241 0.009143] 1970-01-01 00:00:00.282 INFO  main.c:504: Initializing PRUs for 160x120 frame acquisition
-[0.876745 0.009503] 1970-01-01 00:00:00.282 INFO  PRU:1: Capture configured
+[0.712560 0.640093] Starting PRUs
+[0.715645 0.003085] Probing camera drv
+[0.728098 0.012453] Starting camera app
+[0.729740 0.001642] 1970-01-01 00:00:00.230 INFO  main.c:478: Starting rpmsgcam app
 [...]
-[0.891593 0.008242] 1970-01-01 00:00:00.283 INFO  gpio-util.c:62: Configured GPIO line 31 as output (line name: P9_13 [uart4_txd])
-[0.902957 0.011364] 1970-01-01 00:00:00.283 INFO  main.c:201: Starting frames acquisition thread
-[0.911321 0.008364] 1970-01-01 00:00:00.284 INFO  PRU:1: Capture initiated
-[0.917826 0.006505] 1970-01-01 00:00:00.284 INFO  main.c:300: Starting FB display thread
-[0.925472 0.007646] 1970-01-01 00:00:00.339 INFO  main.c:235: Received frame: seq=0
-[0.932735 0.007263] 1970-01-01 00:00:00.339 INFO  main.c:333: Signaled GPIO line
+[0.754141 0.009126] 1970-01-01 00:00:00.230 INFO  main.c:504: Initializing PRUs for 160x120 frame acquisition
+[...]
+[0.798179 0.008390] 1970-01-01 00:00:00.232 INFO  PRU:1: Capture initiated
+[...]
+[0.819581 0.007253] 1970-01-01 00:00:00.287 INFO  main.c:333: Signaled GPIO line
 [...]
 ----
 
 [WARNING]
-For some reason it takes around 0.45 seconds to perform the hardware reset and
-run the ROM code that loads and starts U-Boot SPL. I'm not sure this is a
-hardware fault or just normal and expected behavior.
+For some reason it takes ~0.4 seconds to perform the hardware reset and run the
+ROM code that loads and starts U-Boot SPL. I'm not sure this is a hardware fault
+or just normal and expected behavior.
 
 
 == Known issues
