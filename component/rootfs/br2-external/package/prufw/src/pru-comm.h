@@ -1,7 +1,7 @@
 /*
  * Common data structures and utilities used by both PRU0 and PRU1.
  *
- * Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
 #ifndef _PRU_COMM_H

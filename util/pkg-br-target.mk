@@ -6,7 +6,7 @@
 # only the path of the buildroot defconfig file via $(PKG)_KCONFIG_FILE.
 # Optionally, also an external source directory via $(PKG)_BR2EXT_DIR.
 #
-# Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+# Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 #
 
 #

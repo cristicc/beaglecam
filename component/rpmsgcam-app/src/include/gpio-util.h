@@ -1,7 +1,7 @@
 /*
  * GPIO utility.
  *
- * Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
 #ifndef _GPIO_UTIL_H

@@ -2,7 +2,7 @@
 #
 # Utility script to run BeagleCam remote commands over SSH.
 #
-# Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+# Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 #
 
 set -e

@@ -4,7 +4,7 @@
 #
 # Usage: ./prepare-sd-card.sh /path/to/disk/image/file
 #
-# Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+# Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 #
 
 # Retrieve script path

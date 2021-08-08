@@ -2,7 +2,7 @@
 #
 # Setup Ethernet over USB link using CDC EEM.
 #
-# Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+# Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 #
 
 CDC_EEM_DIR=/sys/kernel/config/usb_gadget/g1

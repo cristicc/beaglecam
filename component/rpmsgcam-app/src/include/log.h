@@ -1,7 +1,7 @@
 /*
  * Simple console logging utility.
  *
- * Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
 #ifndef _LOG_H

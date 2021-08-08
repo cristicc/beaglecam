@@ -8,7 +8,7 @@
  * The result is displayed on the OV7670 I2C camera module,
  * based on the ST703 image sensor.
  *
- * Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
 #include <LCD_ST7032.h>

@@ -3,7 +3,7 @@
 # Utility script to scan for attached USB storage devices and/or
 # prompt the user to choose one of the available drives.
 #
-# Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+# Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 #
 
 #

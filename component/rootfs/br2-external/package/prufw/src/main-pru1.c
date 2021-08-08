@@ -21,7 +21,7 @@
  * unexpected errors occured. Those errors are sent to the host via dedicated
  * log messages.
  *
- * Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
 #include <stdint.h>

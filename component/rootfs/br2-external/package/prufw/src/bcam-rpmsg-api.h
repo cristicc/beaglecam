@@ -1,7 +1,7 @@
 /*
  * BeagleCam PRU RPMsg API.
  *
- * Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
 #ifndef _BCAM_RPMSG_API_H

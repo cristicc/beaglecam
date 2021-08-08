@@ -4,7 +4,7 @@
 # Inspired from Buildroot's make infrastructure:
 # https://git.busybox.net/buildroot/tree/Makefile
 #
-# Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+# Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
 #
 
 # Delete default rules to improve performance.

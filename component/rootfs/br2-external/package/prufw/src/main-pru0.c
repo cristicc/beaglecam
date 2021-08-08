@@ -21,7 +21,7 @@
  * To ensure a reliable data transfer, PRU0 maintains a sequence counter that
  * is incremented before each data transfer.
  *
- * Copyright (c) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
+ * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
 #include <stdint.h>
