@@ -499,7 +499,7 @@ int main(int argc, char *argv[])
 	setup_signal_handler();
 
 	/* Configure the OV7670 Camera Module via the I2C-like interface */
-	if (options.cam_dev[0] != '-') {
+	if (options.test_mode == 0 && options.cam_dev[0] != '-') {
 		log_info("Initializing camera module");
 		ret = cam_init(options.cam_dev);
 		if (ret != 0) {
