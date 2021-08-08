@@ -19,7 +19,10 @@ struct rpmsg_cam_frame {
 	uint8_t pixels[BCAM_FRAME_LEN_MAX];	/* Image content */
 };
 
-rpmsg_cam_handle_t rpmsg_cam_init(const char *rpmsg_dev_path, int xres, int yres);
+rpmsg_cam_handle_t
+rpmsg_cam_init(const char *rpmsg_dev_path, int xres, int yres,
+			   int test_mode, int test_pclk_mhz);
+
 int rpmsg_cam_start(rpmsg_cam_handle_t handle);
 int rpmsg_cam_stop(rpmsg_cam_handle_t handle);
 int rpmsg_cam_release(rpmsg_cam_handle_t handle);

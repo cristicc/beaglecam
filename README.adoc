@@ -700,7 +700,8 @@ The resolution of the test images is configurable via the program arguments:
 ----
 root@beaglecam:~# rpmsgcam-app -h
 Usage: rpmsgcam-app [-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-m MAX_FRAMES]
-                   [-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]
+                   [-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE]
+                   [-t [-p PCLK_MHZ]] [-h]
 Options:
  -l LOG_LEVEL      Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)
  -x CAM_XRES       Camera X resolution (default 160)
@@ -713,6 +714,8 @@ Options:
  -o GPIOLINE_OFF   GPIO line offset index relative to GPIO chip device (default 31).
                    The line is used to signal the receiving of the first frame
  -s DUMP_FILE      File path to save the raw content of the first frame
+ -t                Enable test mode to let PRU0 generate RGB565 images
+ -p PCLK_MHZ       Pixel clock frequency (MHz) for the generated images (default 1)
 ----
 
 Run the command bellow to generate 320x240 image frames in RGB565 format and
@@ -724,26 +727,26 @@ the indicated no. of frames.
 
 [source,sh]
 ----
-root@beaglecam:~# rpmsgcam-app -l 3 -x 320 -y 240 -c - -f /dev/fb0 -r /dev/rpmsgcam31 -m 1
-1970-01-01 00:00:00.310 INFO  main.c:478: Starting rpmsgcam app
-1970-01-01 00:00:00.310 INFO  main.c:495: Initializing LCD frame buffer
-1970-01-01 00:00:00.310 INFO  fb.c:43: FB screen info: 480x272, 16bpp, xoff=0, yoff=0
-1970-01-01 00:00:00.310 INFO  main.c:504: Initializing PRUs for 320x240 frame acquisition
-1970-01-01 00:00:00.311 INFO  PRU:1: Capture configured
-1970-01-01 00:00:00.311 INFO  main.c:515: Initializing GPIO output line: 31
-1970-01-01 00:00:00.311 INFO  gpio-util.c:62: Configured GPIO line 31 as output (line name: P9_13 [uart4_txd])
-1970-01-01 00:00:00.311 INFO  main.c:201: Starting frames acquisition thread
-1970-01-01 00:00:00.312 INFO  PRU:1: Capture initiated
-1970-01-01 00:00:00.312 INFO  main.c:300: Starting FB display thread
-1970-01-01 00:00:00.500 INFO  main.c:235: Received frame: seq=0
-1970-01-01 00:00:00.501 INFO  main.c:333: Signaled GPIO line: 31
-1970-01-01 00:00:00.502 INFO  main.c:344: Reached max allowed no. of frames: 1
-1970-01-01 00:00:00.502 INFO  main.c:281: Stopping FB display thread
-1970-01-01 00:00:00.502 INFO  main.c:285: Frame display stats: fps=5.3, cnt=1
-1970-01-01 00:00:00.512 INFO  main.c:554: Stopping rpmsgcam app
-1970-01-01 00:00:00.512 INFO  main.c:181: Stopping frames acquisition thread
-1970-01-01 00:00:00.689 INFO  PRU:1: Capture stopped
-1970-01-01 00:00:00.689 INFO  main.c:185: Frame acquire stats: total=1, dropped=0, discarded=0, rpmsgerr=0
+root@beaglecam:~# rpmsgcam-app -l 3 -x 320 -y 240 -c - -f /dev/fb0 -r /dev/rpmsgcam31 -m 1 -t -p 2
+1970-01-01 04:22:11.473 INFO  main.c:496: Starting rpmsgcam app
+1970-01-01 04:22:11.473 INFO  main.c:513: Initializing LCD frame buffer
+1970-01-01 04:22:11.474 INFO  fb.c:43: FB screen info: 480x272, 16bpp, xoff=0, yoff=0
+1970-01-01 04:22:11.475 INFO  main.c:522: Initializing PRUs for 320x240 frame acquisition
+1970-01-01 04:22:11.476 INFO  PRU:1: Capture configured
+1970-01-01 04:22:11.477 INFO  main.c:534: Initializing GPIO output line: 31
+1970-01-01 04:22:11.497 INFO  gpio-util.c:62: Configured GPIO line 31 as output (line name: P9_13 [uart4_txd])
+1970-01-01 04:22:11.499 INFO  main.c:207: Starting frames acquisition thread
+1970-01-01 04:22:11.500 INFO  PRU:1: Capture initiated
+1970-01-01 04:22:11.501 INFO  main.c:306: Starting FB display thread
+1970-01-01 04:22:11.679 INFO  main.c:241: Received frame: seq=0
+1970-01-01 04:22:11.684 INFO  main.c:339: Signaled GPIO line: 31
+1970-01-01 04:22:11.685 INFO  main.c:350: Reached max allowed no. of frames: 1
+1970-01-01 04:22:11.686 INFO  main.c:287: Stopping FB display thread
+1970-01-01 04:22:11.686 INFO  main.c:291: Frame display stats: fps=5.4, cnt=1
+1970-01-01 04:22:11.699 INFO  main.c:573: Stopping rpmsgcam app
+1970-01-01 04:22:11.700 INFO  main.c:187: Stopping frames acquisition thread
+1970-01-01 04:22:11.858 INFO  PRU:1: Capture stopped
+1970-01-01 04:22:11.859 INFO  main.c:191: Frame acquire stats: total=1, dropped=0, discarded=0, rpmsgerr=0
 ----
 
 

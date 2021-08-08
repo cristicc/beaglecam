@@ -19,6 +19,7 @@
 #define RPMSG_MESSAGE_SIZE		496
 #define EP_MAX_EVENTS			1
 #define EP_TIMEOUT_MSEC			1500
+#define DEFAULT_IMG_BPP			16
 
 /*
  * State of a RPMsg capture instance.
@@ -28,7 +29,7 @@ struct rpmsg_cam_handle {
 	uint32_t img_xres;						/* Image X resolution */
 	uint32_t img_yres;						/* Image Y resolution */
 	uint32_t img_bpp;						/* Image bits per pixel */
-	uint32_t img_sz;						/* img_xres * img_yres * img_bpp */
+	uint32_t img_sz;						/* Image size in bytes */
 	uint32_t frame_cnt;						/* Counter for image frames */
 	int rpmsg_fd;							/* RPMsg file descriptor */
 	uint8_t rpmsg_buf[RPMSG_MESSAGE_SIZE];	/* RPMsg receive buffer */
@@ -162,12 +163,14 @@ static int rpmsg_cam_send_cmd(struct rpmsg_cam_handle *h, enum bcam_arm_msg_type
  * Returns an opaque handle to a dynamically allocated internal state
  * structure or NULL in case of an error.
  */
-rpmsg_cam_handle_t rpmsg_cam_init(const char *rpmsg_dev_path, int xres, int yres)
+rpmsg_cam_handle_t rpmsg_cam_init(const char *rpmsg_dev_path,
+								  int xres, int yres,
+								  int test_mode, int test_pclk_mhz)
 {
 	struct bcam_cap_config setup_data;
 	struct rpmsg_cam_handle *h;
 	struct epoll_event ev;
-	int bpp = 2, i, ret;
+	int i, ret;
 
 	h = malloc(sizeof(*h));
 	if (h == NULL) {
@@ -213,7 +216,9 @@ rpmsg_cam_handle_t rpmsg_cam_init(const char *rpmsg_dev_path, int xres, int yres
 
 	setup_data.xres = xres;
 	setup_data.yres = yres;
-	setup_data.bpp = bpp;
+	setup_data.bpp = DEFAULT_IMG_BPP;
+	setup_data.test_mode = test_mode;
+	setup_data.test_pclk_mhz = test_pclk_mhz;
 
 	ret = rpmsg_cam_send_cmd(h, BCAM_ARM_MSG_CAP_SETUP, &setup_data, sizeof(setup_data));
 	if (ret != 0) {
@@ -221,14 +226,13 @@ rpmsg_cam_handle_t rpmsg_cam_init(const char *rpmsg_dev_path, int xres, int yres
 		return NULL;
 	}
 
-	h->img_xres = xres;
-	h->img_yres = yres;
-	h->img_bpp = bpp;
-	h->img_sz = xres * yres * bpp;
+	h->img_xres = setup_data.xres;
+	h->img_yres = setup_data.yres;
+	h->img_bpp = setup_data.bpp;
+	h->img_sz = h->img_xres * h->img_yres * h->img_bpp / 8;
 	h->frame_cnt = 0;
 
 	return h;
-
 }
 
 /*

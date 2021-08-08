@@ -42,13 +42,15 @@
 #define DEFAULT_RPMSG_DEV		"/dev/rpmsgcam31"
 #define DEFAULT_GPIOCHIP_DEV	"/dev/gpiochip3"
 #define DEFAULT_GPIOLINE_OFF	31
+#define DEFAULT_PCLK_MHZ		1
 
 /* Program options */
-#define PROG_OPT_STR			"l:x:y:m:c:f:r:g:o:s:h"
+#define PROG_OPT_STR			"l:x:y:m:c:f:r:g:o:s:tp:h"
 
 #define PROG_TRIVIAL_USAGE \
 	"[-l LOG_LEVEL] [-x CAM_XRES -y CAM_YRES] [-m MAX_FRAMES]" \
-	"\n                   [-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE] [-h]"
+	"\n                   [-c CAM_DEV] [-f FB_DEV] [-r RPMSG_DEV] [-s DUMP_FILE]" \
+	"\n                   [-t [-p PCLK_MHZ]] [-h]" \
 
 #define PROG_FULL_USAGE "Options:" \
 	"\n -l LOG_LEVEL      Console log level no (0 FATAL, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE)" \
@@ -62,6 +64,8 @@
 	"\n -o GPIOLINE_OFF   GPIO line offset index relative to GPIO chip device (default "STR(DEFAULT_GPIOLINE_OFF)")." \
 	"\n                   The line is used to signal the receiving of the first frame" \
 	"\n -s DUMP_FILE      File path to save the raw content of the first frame" \
+	"\n -t                Enable test mode to let PRU0 generate RGB565 images" \
+	"\n -p PCLK_MHZ       Pixel clock frequency (MHz) for the generated images (default "STR(DEFAULT_PCLK_MHZ)")" \
 
 struct prog_opts {
 	int log_level;
@@ -74,6 +78,8 @@ struct prog_opts {
 	const char *gpiochip_dev;
 	int gpioline_off;
 	const char *dump_file;
+	int test_mode;
+	int test_pclk_mhz;
 };
 
 /* Frame acquire statistics */
@@ -396,6 +402,8 @@ int main(int argc, char *argv[])
 		.gpiochip_dev = DEFAULT_GPIOCHIP_DEV,
 		.gpioline_off = DEFAULT_GPIOLINE_OFF,
 		.dump_file = "",
+		.test_mode = 0,
+		.test_pclk_mhz = DEFAULT_PCLK_MHZ,
 	};
 
 	while ((opt = getopt(argc, argv, PROG_OPT_STR)) != -1) {
@@ -452,6 +460,16 @@ int main(int argc, char *argv[])
 			options.dump_file = optarg;
 			break;
 
+		case 't':
+			options.test_mode = 1;
+			break;
+
+		case 'p':
+			ret = strtol(optarg, NULL, 10);
+			if (ret > 0)
+				options.test_pclk_mhz = ret;
+			break;
+
 		case 'h':
 			usage(basename(argv[0]), 1);
 			exit(EXIT_SUCCESS);
@@ -503,7 +521,8 @@ int main(int argc, char *argv[])
 	/* Initialize PRUs via RPMsg */
 	log_info("Initializing PRUs for %dx%d frame acquisition",
 			 options.cam_xres, options.cam_yres);
-	rpmsg_cam_h = rpmsg_cam_init(options.rpmsg_dev, options.cam_xres, options.cam_yres);
+	rpmsg_cam_h = rpmsg_cam_init(options.rpmsg_dev, options.cam_xres, options.cam_yres,
+								 options.test_mode, options.test_pclk_mhz);
 	if (rpmsg_cam_h == NULL) {
 		log_fatal("Failed to initialize RPMsg camera communication");
 		ret = -1;
