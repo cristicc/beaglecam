@@ -59,7 +59,7 @@ volatile register uint32_t __R31;
 #define VIRTIO_CONFIG_S_DRIVER_OK	4
 
 /* Timeout waiting for ACKs from PRU0 */
-#define PRU0_ACK_TMOUT_USEC		200
+#define PRU0_ACK_TMOUT_USEC		1000
 
 /* Timeout waiting for cap_data messages from PRU0 */
 #define PRU0_CAP_TMOUT_USEC		5000
@@ -83,14 +83,14 @@ struct pru_rpmsg_hdr {
 /*
  * Global variables.
  */
-uint8_t arm_recv_buf[RPMSG_MESSAGE_SIZE];
-uint8_t arm_send_buf[RPMSG_MESSAGE_SIZE];
-enum bcam_cap_status run_state = BCAM_CAP_STOPPED;
+static uint8_t arm_recv_buf[RPMSG_MESSAGE_SIZE];
+static uint8_t arm_send_buf[RPMSG_MESSAGE_SIZE];
+static enum bcam_cap_status run_state = BCAM_CAP_STOPPED;
 
 /*
  * Disables PRU1 cycle counter in CTRL register.
  */
-void disable_timer()
+static void disable_timer()
 {
 	PRU1_CTRL.CTRL_bit.CTR_EN = 0;
 }
@@ -99,7 +99,7 @@ void disable_timer()
  * Resets the counter value in the PRU1 CYCLE register. Note this requires the
  * counter to be disabled. Afterwards (re)enables the counter in CTRL register.
  */
-void enable_timer()
+static void enable_timer()
 {
 	disable_timer();
 
@@ -114,7 +114,7 @@ void enable_timer()
  * Returns 0 if no timeout occurred. Otherwise, disables the timer
  * and returns 1.
  */
-int timer_expired(uint32_t tmout_usec)
+static int timer_expired(uint32_t tmout_usec)
 {
 	if (PRU1_CTRL.CYCLE < PRU_CYCLES_PER_USEC * tmout_usec)
 		return 0;
@@ -127,7 +127,8 @@ int timer_expired(uint32_t tmout_usec)
  * Utility to start/stop data capture on PRU0.
  * Returns 0 on success or -1 on failure.
  */
-int16_t start_stop_capture(uint8_t start) {
+static int16_t start_stop_capture(uint8_t start)
+{
 	/* Prepare command for PRU0 */
 	SMEM.pru1_cmd.id = PRU_CMD_NONE;
 	SMEM.pru0_cmd.id = start ? PRU_CMD_CAP_START : PRU_CMD_CAP_STOP;
@@ -157,7 +158,7 @@ int16_t start_stop_capture(uint8_t start) {
 /*
  * Initializes PRU core.
  */
-void init_pru_core()
+static void init_pru_core()
 {
 	uint8_t blinks;
 
@@ -174,8 +175,8 @@ void init_pru_core()
 	/* Set default frame acquisition configuration */
 	SMEM.cap_config.xres = 160;
 	SMEM.cap_config.yres = 120;
-	SMEM.cap_config.bpp = 2;
-	SMEM.cap_config.img_sz = SMEM.cap_config.xres * SMEM.cap_config.yres * SMEM.cap_config.bpp;
+	SMEM.cap_config.bpp = 16;
+	SMEM.cap_config.img_sz = SMEM.cap_config.xres * SMEM.cap_config.yres * SMEM.cap_config.bpp / 8;
 	SMEM.cap_config.test_mode = 1;
 
 	/* 3 Hz LED blink for 2 seconds */
@@ -187,7 +188,7 @@ void init_pru_core()
 /*
  * Initializes RPMsg subsystem.
  */
-void init_rpmsg(struct pru_rpmsg_transport *transport, uint8_t reinit)
+static void init_rpmsg(struct pru_rpmsg_transport *transport, uint8_t reinit)
 {
 	volatile uint8_t *status;
 
@@ -222,8 +223,8 @@ void init_rpmsg(struct pru_rpmsg_transport *transport, uint8_t reinit)
 /*
  * Sends info messages to ARM as requested via BCAM_ARM_MSG_GET_* commands.
  */
-int16_t rpmsg_send_info(struct pru_rpmsg_transport *transport, uint32_t src,
-			uint32_t dst, struct bcam_arm_msg *req_info_cmd)
+static int16_t rpmsg_send_info(struct pru_rpmsg_transport *transport, uint32_t src,
+			       uint32_t dst, struct bcam_arm_msg *req_info_cmd)
 {
 	struct bcam_pru_msg *msg = (struct bcam_pru_msg *)arm_send_buf;
 	const char *fw_ver = PRU_FW_VERSION;
@@ -254,8 +255,8 @@ int16_t rpmsg_send_info(struct pru_rpmsg_transport *transport, uint32_t src,
 /*
  * Sends a log message to ARM.
  */
-int16_t rpmsg_send_log(struct pru_rpmsg_transport *transport, uint32_t src,
-		       uint32_t dst, enum bcam_pru_log_level level, const char *str)
+static int16_t rpmsg_send_log(struct pru_rpmsg_transport *transport, uint32_t src,
+			      uint32_t dst, enum bcam_pru_log_level level, const char *str)
 {
 	struct bcam_pru_msg *msg = (struct bcam_pru_msg *)arm_send_buf;
 	uint8_t *data_buf;
@@ -285,12 +286,9 @@ int16_t rpmsg_send_log(struct pru_rpmsg_transport *transport, uint32_t src,
  * To explicitly flush the cache, call the function with 'flush' argument set
  * to 1, which forces the data transfer.
  */
-int16_t rpmsg_send_cap(
-	struct pru_rpmsg_transport	*transport,
-	uint32_t			src,
-	uint32_t			dst,
-	struct cap_data			*cap,
-	uint8_t				flush)
+static int16_t rpmsg_send_cap(struct pru_rpmsg_transport *transport,
+			      uint32_t src, uint32_t dst,
+			      struct cap_data *cap, uint8_t flush)
 {
 	/* Standard RPMsg infrastructure data */
 	static struct pru_rpmsg_hdr	*msg;
@@ -415,9 +413,9 @@ void main(void)
 					SMEM.cap_config.xres = ((struct bcam_cap_config *)arm_cmd->data)->xres;
 					SMEM.cap_config.yres = ((struct bcam_cap_config *)arm_cmd->data)->yres;
 					SMEM.cap_config.bpp = ((struct bcam_cap_config *)arm_cmd->data)->bpp;
-					SMEM.cap_config.img_sz = SMEM.cap_config.xres * SMEM.cap_config.yres *
-								 SMEM.cap_config.bpp;
-					SMEM.cap_config.test_mode = 1;
+					SMEM.cap_config.img_sz = SMEM.cap_config.xres * SMEM.cap_config.yres * SMEM.cap_config.bpp / 8;
+					SMEM.cap_config.test_mode = ((struct bcam_cap_config *)arm_cmd->data)->test_mode;
+					SMEM.cap_config.test_pclk_mhz = ((struct bcam_cap_config *)arm_cmd->data)->test_pclk_mhz;
 
 					rpmsg_send_log(&transport, rpmsg_dst, rpmsg_src,
 						       BCAM_PRU_LOG_INFO, "Capture configured");
@@ -453,8 +451,12 @@ void main(void)
 				/* VSYNC not yet LOW, process pending ARM commands */
 				continue;
 			} else {
-				/* Test mode: wait 10 ms before generating new frame */
-				MSLEEP(10);
+				/*
+				 * Simulate VSYNC wait according to the OV7670 specs:
+				 * (VSYNC - HREF) delay = 20 * HREF duration
+				 */
+				delay_cycles_var(20 * SMEM.cap_config.xres * (SMEM.cap_config.bpp / 8) *
+						 PRU_CYCLES_PER_USEC / SMEM.cap_config.test_pclk_mhz);
 			}
 
 			/* Resume frame acquisition */

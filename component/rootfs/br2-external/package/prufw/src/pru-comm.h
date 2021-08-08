@@ -8,7 +8,7 @@
 #define _PRU_COMM_H
 
 /* Track firmware changes */
-#define PRU_FW_VERSION			"0.0.6"
+#define PRU_FW_VERSION			"0.0.7"
 
 /* Local address of the PRU shared RAM */
 #define SHARED_MEM_ADDR			0x10000
@@ -43,8 +43,9 @@ struct shared_mem {
 		uint16_t xres;		/* Image X resolution */
 		uint16_t yres;		/* Image Y resolution */
 		uint8_t bpp;		/* Bits per pixel */
+		uint32_t img_sz;	/* Image size in bytes */
 		uint8_t test_mode;	/* Enable test image generation */
-		uint32_t img_sz;	/* xres * yres * bpp */
+		uint8_t test_pclk_mhz;	/* Test image pixel clock freq (MHz) */
 	} cap_config;
 };
 
@@ -69,7 +70,7 @@ struct cap_data {
 #define SCRATCH_PAD_BANK_DEV(bank_no)	(10 + (bank_no))
 
 /* The register no. from where data XFER should start */
-#define XFER_START_REG_NO		8
+#define XFER_START_REG_NO		20
 
 /* Stores data from src_buf into the specified scratch pad bank */
 #define STORE_DATA(bank_no, src_buf)				\
@@ -85,8 +86,31 @@ struct cap_data {
 /*
  * PRU sleep helpers.
  */
+#define NSLEEP(nsec)			__delay_cycles(PRU_CYCLES_PER_USEC * (nsec) / 1000)
 #define USLEEP(usec)			__delay_cycles(PRU_CYCLES_PER_USEC * (usec))
 #define MSLEEP(msec)			USLEEP(1000 * (msec))
+
+/*
+ * Alternative to __delay_cycles() intrinsic allowing for a variable
+ * expression to be provided as argument.
+ *
+ * Note function input arguments are stored in R14..R29. For more details,
+ * refer to "PRU Optimizing C/C+ Compiler User's Guide" document, section
+ * "Function Structure and Calling Conventions".
+ *
+ * FIXME: For some reason, r14 doesn't hold the value of n.
+ * As workaround, defined the function in delay-cycles-var.asm module.
+ */
+/*static inline void delay_cycles_var(uint32_t n)
+{
+	__asm(
+		"	.newblock		\n"
+		"$1:				\n"
+		"	sub	r14, r14, 1	\n"
+		"	qbne	$1, r14, 0	\n"
+	);
+}*/
+extern void delay_cycles_var(uint32_t n);
 
 /*
  * PRU IO helpers.

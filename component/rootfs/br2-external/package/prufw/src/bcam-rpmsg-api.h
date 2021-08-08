@@ -30,6 +30,8 @@ struct bcam_cap_config {
 	uint16_t xres;			/* Image X resolution */
 	uint16_t yres;			/* Image Y resolution */
 	uint8_t bpp;			/* Bits per pixel */
+	uint8_t test_mode;		/* Enable test image generation */
+	uint8_t test_pclk_mhz;		/* Test image pixel clock freq (MHz) */
 } __attribute__((packed));
 
 /* Messages sent from PRU1 to ARM. */

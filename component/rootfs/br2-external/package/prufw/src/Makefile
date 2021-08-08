@@ -26,15 +26,15 @@ LFLAGS=--reread_libs --warn_sections --stack_size=$(STACK_SIZE) --heap_size=$(HE
 
 TARGET0=$(GEN_DIR)/$(PROJ_NAME)0.out
 MAP0=$(GEN_DIR)/$(PROJ_NAME)0.map
-SOURCES0=main-pru0.c
-#Using .object instead of .obj in order to not conflict with the CCS build process
-OBJECTS0=$(patsubst %,$(GEN_DIR)/%,$(SOURCES0:.c=.object))
+SOURCES0=main-pru0.c delay-cycles-var.asm
+OBJECTS0:=$(patsubst %.c,$(GEN_DIR)/%.object,$(SOURCES0))
+OBJECTS0:=$(patsubst %.asm,$(GEN_DIR)/%.object,$(OBJECTS0))
 
 TARGET1=$(GEN_DIR)/$(PROJ_NAME)1.out
 MAP1=$(GEN_DIR)/$(PROJ_NAME)1.map
-SOURCES1=main-pru1.c
-#Using .object instead of .obj in order to not conflict with the CCS build process
-OBJECTS1=$(patsubst %,$(GEN_DIR)/%,$(SOURCES1:.c=.object))
+SOURCES1=main-pru1.c delay-cycles-var.asm
+OBJECTS1:=$(patsubst %.c,$(GEN_DIR)/%.object,$(SOURCES1))
+OBJECTS1:=$(patsubst %.asm,$(GEN_DIR)/%.object,$(OBJECTS1))
 
 all: $(TARGET0) $(TARGET1)
 
@@ -47,6 +47,11 @@ $(TARGET0): $(OBJECTS0) $(LINKER_COMMAND_FILE)
 $(TARGET1): $(OBJECTS1) $(LINKER_COMMAND_FILE)
 	@echo 'Building target: $@'
 	$(PRU_CGT)/bin/clpru $(ALL_CFLAGS) -z -i$(PRU_CGT)/lib -i$(PRU_CGT)/include $(LFLAGS) -o $(TARGET1) $(OBJECTS1) -m$(MAP1) $(LINKER_COMMAND_FILE) --library=libc.a $(LIBS)
+
+# Invokes the compiler on all asm files in the directory to create the object files
+$(GEN_DIR)/%.object: %.asm
+	@mkdir -p $(GEN_DIR)
+	$(PRU_CGT)/bin/clpru --include_path=$(PRU_CGT)/include $(INCLUDE) $(ALL_CFLAGS) -fe $@ $<
 
 # Invokes the compiler on all c files in the directory to create the object files
 $(GEN_DIR)/%.object: %.c $(wildcard *.h)

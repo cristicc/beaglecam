@@ -38,12 +38,13 @@ volatile register uint32_t __R31;
 static struct cap_data frm_data;
 static uint8_t capture_started;
 static uint8_t crt_bank;
+static uint16_t test_pclk_cycles;
 
 /*
  * Checks for commands from PRU1.
  * Returns the received command ID.
  */
-uint8_t check_pru1_cmd() {
+static uint8_t check_pru1_cmd() {
 	static uint8_t id;
 
 	/* Check SMEM for new command from PRU1 */
@@ -58,12 +59,17 @@ uint8_t check_pru1_cmd() {
 	case PRU_CMD_CAP_START:
 		capture_started = 1;
 		crt_bank = 0;
+
 		/* Invalidate content of scratch pad banks */
 		frm_data.seq = 0;
 		frm_data.len = 0;
 		STORE_DATA(0, frm_data);
 		STORE_DATA(1, frm_data);
 		STORE_DATA(2, frm_data);
+
+		if (SMEM.cap_config.test_mode != 0)
+			test_pclk_cycles = sizeof(frm_data.data) *
+					   PRU_CYCLES_PER_USEC / SMEM.cap_config.test_pclk_mhz;
 		break;
 
 	case PRU_CMD_CAP_STOP:
@@ -82,11 +88,8 @@ uint8_t check_pru1_cmd() {
 
 /*
  * Generates test RGB565 pixels stored in BGR (little endian) format.
- *
- * Returns 1 if a PRU_CMD_CAP_* command interrupted the data generation process,
- * otherwise the return code is 0.
  */
-uint8_t generate_test_data(struct cap_data *buf)
+static void generate_test_data(struct cap_data *buf)
 {
 	uint32_t img_part_size = SMEM.cap_config.img_sz / 3;
 	uint32_t img_part_off = buf->seq * sizeof(buf->data);
@@ -107,21 +110,10 @@ uint8_t generate_test_data(struct cap_data *buf)
 			buf->data[iter++] = 0x00;
 		}
 
-		/*
-		 * Simulate 1 MHz PCLK. Note the delay is doubled because we need
-		 * 2 PCLK ticks, one for each of the 2 generated data bytes above.
-		 */
-		USLEEP(2);
-
-		/* Process command from PRU1 */
-		if (check_pru1_cmd() != PRU_CMD_NONE)
-			return 1;
-
 		img_part_off += 2;
 	}
 
 	buf->len = iter;
-	return 0;
 }
 
 /*
@@ -141,14 +133,19 @@ void main(void)
 		/* Process command from PRU1 */
 		check_pru1_cmd();
 
+check_status:
 		if (capture_started == 0)
 			continue;
 
 		if (SMEM.cap_config.test_mode != 0) {
-			if (frm_data.seq == 0)
-				USLEEP(1000);
-			if (generate_test_data(&frm_data) != 0)
-				continue;
+			generate_test_data(&frm_data);
+
+			/* Simulate PCLK */
+			delay_cycles_var(test_pclk_cycles);
+
+			if (check_pru1_cmd() != PRU_CMD_NONE)
+				goto check_status;
+
 		} else {
 			//TODO: get data from camera module
 		}
