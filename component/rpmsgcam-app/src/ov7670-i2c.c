@@ -19,13 +19,14 @@
 static int ov7670_read_reg(int i2c_fd, unsigned char i2c_addr,
 						   unsigned char reg, unsigned char *value)
 {
-	//int ret = i2c_write_read(i2c_fd, i2c_addr, &reg, 1, value, 1);
+	/* Write register address */
 	int ret = i2c_write(i2c_fd, i2c_addr, &reg, 1);
 	if (ret != 0) {
 		log_error("Failed to request ov7670 i2c reg 0x%02x", reg);
 		return ret;
 	}
 
+	/* Read register value */
 	ret = i2c_read(i2c_fd, i2c_addr, value, 1);
 	if (ret != 0)
 		log_error("Failed to read ov7670 i2c reg 0x%02x", reg);
@@ -121,28 +122,33 @@ int ov7670_i2c_setup(const char *dev_path)
 		{ REG_COM7, COM7_FMT_QVGA | COM7_RGB },
 		{ REG_COM10, COM10_PCLK_HB },		/* Suppress PCLK on horiz blank */
 		{ REG_COM14, COM14_DCWEN | 0x1 },	/* DCW/PCLK-scale enable, PCLK divider=2 */
-		//TODO: check if needed to set SCALING_PCLK_DIV[3:0] (0x73))
+		/* TODO: check if needed to set SCALING_PCLK_DIV[3:0] (0x73) */
 	};
 
 	unsigned char cam_addr = OV7670_I2C_ADDR >> 1;
 	int cam_fd, ret;
 
+	log_debug("Opening %s (addr=0x%02x)", dev_path, cam_addr);
 	cam_fd = i2c_open(dev_path, cam_addr);
 	if (cam_fd < 0)
 		return cam_fd;
 
+	log_debug("Detecting ov7670 chip");
 	ret = ov7670_detect(cam_fd, cam_addr);
 	if (ret != 0)
 		goto err_close;
 
+	log_debug("Writing ov7670 default regs");
 	ret = ov7670_write_regs(cam_fd, ov7670_get_regval_list(OV7670_REGS_DEFAULT));
 	if (ret != 0)
 		goto err_close;
 
+	log_debug("Writing ov7670 rgb565 regs");
 	ret = ov7670_write_regs(cam_fd, ov7670_get_regval_list(OV7670_REGS_FMT_RGB565));
 	if (ret != 0)
 		goto err_close;
 
+	log_debug("Writing ov7670 custom regs");
 	ret = ov7670_write_regs(cam_fd, ov7670_custom_regs);
 	if (ret != 0)
 		goto err_close;
