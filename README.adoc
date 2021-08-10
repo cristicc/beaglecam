@@ -224,8 +224,8 @@ BeagleBone pins for controlling camera via `XCLK`, `SIO_C` and `SIO_D`::
 | BB Header | BB Pin Name | ZCZ BallName  | Pinmux Mode | Pinmux Function | Cam Pin Name
 
 | P8_07     | TIMER4      | gpmc_advn_ale | Mode_2      | timer4          | XCLK
-| P9_21     | UART2_TXD   | spi0_d0       | Mode_2      | I2C2_SCL        | SIO_C
-| P9_22     | UART2_RXD   | spi0_sclk     | Mode_2      | I2C2_SDA        | SIO_D
+| P9_19     | I2C2_SCL    | uart1_rtsn    | Mode_3      | I2C2_SCL        | SIO_C
+| P9_20     | I2C2_SDA    | uart1_ctsn    | Mode_3      | I2C2_SDA        | SIO_D
 |===
 
 VGA Frame Timing::

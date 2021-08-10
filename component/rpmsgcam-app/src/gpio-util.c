@@ -81,7 +81,7 @@ int gpioutil_line_set_value(int gpioline_fd, int value)
 
 	ret = ioctl(gpioline_fd, GPIOHANDLE_SET_LINE_VALUES_IOCTL, &data);
 	if (ret < 0) {
-		log_error("GPIO ioctl failed: ", strerror(errno));
+		log_error("GPIOHANDLE_SET_LINE_VALUES_IOCTL failed: ", strerror(errno));
 		return ret;
 	}
 

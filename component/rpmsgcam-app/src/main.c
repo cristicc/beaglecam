@@ -25,7 +25,7 @@
 #include "fb.h"
 #include "gpio-util.h"
 #include "log.h"
-#include "ov7670-ctrl.h"
+#include "ov7670-i2c.h"
 #include "rpmsg-cam.h"
 
 /* Standard string conversion macros */
@@ -37,7 +37,7 @@
 #define DEFAULT_CAM_YRES		120
 
 /* Default device paths */
-#define DEFAULT_CAM_DEV			"/dev/i2c-1"	/* I2C2 on BeagleBone Black */
+#define DEFAULT_CAM_DEV			"/dev/i2c-2"
 #define DEFAULT_FB_DEV			"/dev/fb0"
 #define DEFAULT_RPMSG_DEV		"/dev/rpmsgcam31"
 #define DEFAULT_GPIOCHIP_DEV	"/dev/gpiochip3"
@@ -501,7 +501,7 @@ int main(int argc, char *argv[])
 	/* Configure the OV7670 Camera Module via the I2C-like interface */
 	if (options.test_mode == 0 && options.cam_dev[0] != '-') {
 		log_info("Initializing camera module");
-		ret = cam_init(options.cam_dev);
+		ret = ov7670_i2c_setup(options.cam_dev);
 		if (ret != 0) {
 			log_fatal("Failed to initialize camera module");
 			goto free_ring;
