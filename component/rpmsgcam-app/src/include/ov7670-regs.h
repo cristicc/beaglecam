@@ -159,4 +159,24 @@
 #define REG_HAECC7	0xaa	/* Hist AEC/AGC control 7 */
 #define REG_BD60MAX	0xab	/* 60hz banding step limit */
 
+/*
+ * API helpers.
+ */
+
+struct regval_list {
+	unsigned char reg_num;
+	unsigned char value;
+};
+
+enum ov7670_reglist_ids {
+	OV7670_REGS_DEFAULT,
+	OV7670_REGS_FMT_YUV422,
+	OV7670_REGS_FMT_RGB565,
+	OV7670_REGS_FMT_RGB444,
+	OV7670_REGS_FMT_RAW,
+	OV7670_REGS_MAX,
+};
+
+const struct regval_list *ov7670_get_regval_list(enum ov7670_reglist_ids id);
+
 #endif /* _OV7670_REGS_H */
