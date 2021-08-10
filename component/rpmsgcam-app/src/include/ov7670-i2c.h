@@ -4,9 +4,9 @@
  * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
 
-#ifndef _OV7670_CTRL_H
-#define _OV7670_CTRL_H
+#ifndef _OV7670_I2C_H
+#define _OV7670_I2C_H
 
-int cam_init(const char *i2c_dev);
+int ov7670_i2c_setup(const char *dev_path);
 
-#endif /* _OV7670_CTRL_H */
+#endif /* _OV7670_I2C_H */
