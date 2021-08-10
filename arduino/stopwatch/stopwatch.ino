@@ -31,7 +31,7 @@ static void print_time(int msec) {
   lcd.print(msec / 1000, DEC);
   lcd.print('.');
   lcd.print(msec % 1000, DEC);
-  lcd.print(" sec ");
+  lcd.print(" sec     ");
 }
 
 void setup()
@@ -62,10 +62,11 @@ void loop() {
   while (digitalRead(PIN_START) == HIGH);
 
 wait_reset:
+  print_msg("BBB reset down");
   Serial.println("Waiting while SYS_RESETn is LOW");
   while (digitalRead(PIN_START) == LOW);
 
-  print_msg("Booting BBB...");
+  print_msg("  Booting BBB.. ");
   Serial.println("Starting counter");
   start_time = millis();
 
