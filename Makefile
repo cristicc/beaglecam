@@ -220,6 +220,9 @@ build: prj-build
 .PHONY: rebuild
 rebuild: prj-rebuild-all
 
+.PHONY: reinstall
+reinstall: prj-reinstall-all
+
 all: prj
 
 else # $(PRJ_HAVE_DOT_CONFIG)
@@ -271,6 +274,7 @@ help:
 		'  distclean              Delete all non-source files (including downloads).' \
 		'  reconfigure            Rebuild all project components from the configure step.' \
 		'  rebuild                Rebuild all project components.' \
+		'  reinstall              Reinstall all project components.' \
 		'' \
 		'Generic package build targets:' \
 		'  GPKG                   Build GPKG and all its dependencies.' \
