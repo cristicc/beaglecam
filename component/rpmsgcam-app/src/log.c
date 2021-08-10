@@ -76,17 +76,17 @@ void log_write(int level, const char *file, int line, const char *fmt, ...)
  * Writes to the console the content of a buffer in hexadecimal format.
  *
  * @data: buffer to display
- * @length: length of the buffer
+ * @datalen: length of the buffer
  * @linelen: number of chars per output line
  * @chunklen: number of chars per chunk
  */
-int log_hexdump(void const *data, size_t length, int linelen, int chunklen)
+int log_hexdump(void const *data, int datalen, int linelen, int chunklen)
 {
 	char buffer[512];
 	char *ptr;
 	const void *inptr;
 	int pos;
-	int remaining = length;
+	int remaining = datalen;
 
 	if (log_level < LOG_TRACE)
 		return 0;
