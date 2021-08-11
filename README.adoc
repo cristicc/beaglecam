@@ -128,8 +128,8 @@ endif::[]
 Breadboard prototype::
 --
 [WARNING]
-For the moment, the Camera Module and I2C Alphanumeric LCD in the schematics
-are generic and, therefore, do not match the real hardware pin layout.
+For the moment, the Camera Module in the schematics is generic and, therefore,
+doesn't match the OV7670 hardware pin layout.
 
 image::beaglecam-prototype.svg[]
 --
