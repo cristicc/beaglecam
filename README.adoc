@@ -194,17 +194,20 @@ as indicated in the following table:
 ====
 [[pru-pins-note1,Note1]]
 Note 1::
-Bit 4 of the PRU0 registers 30 & 31 (`GPIO3_18`) is routed to P9_42 (`GPIO0_7`) pin.
-It is necessary to set GPIO0_7 to *input* mode via pinmuxing.
+Bit 4 of the PRU0 registers 30 & 31 (`GPIO3_18`) is routed to `P9_42` pin and
+shared with `GPIO0_7` signal. Hence it is necessary to set the unused `GPIO0_7`
+to *input* mode via pinmuxing.
 
 [[pru-pins-note2,Note2]]
 Note 2::
-Bit 6 of the PRU0 registers 30 & 31 (`GPIO3_20`) is routed to P9_41 (`GPIO0_20` / `CLKOUT2`).
-It is necessary to set `GPIO0_20` to *input* mode via pinmuxing.
+Bit 6 of the PRU0 registers 30 & 31 (`GPIO3_20`) is routed to `P9_41` pin and
+shared with `GPIO0_20` / `CLKOUT2` signal. Hence it is necessary to set the
+unused `GPIO0_20` to *input* mode via pinmuxing.
 
 [[pru-pins-note3,Note3]]
 Note 3::
-Bit 13 of the PRU1 register 30 (`GPIO1_31`) is used to control a diagnosis LED.
+Bit 13 of the PRU1 register 30 (`GPIO1_31`) is used to control a diagnosis LED,
+hence the corresponding pin must be set to *output* mode via `Mode_5`.
 
 [[pru-pins-conflict,Conflict]]
 Conflict::
@@ -233,12 +236,21 @@ endif::[]
 ifndef::env-github[]
 [wavedrom]
 ----
-{ signal: [
-  { name: "PCLK",   wave: "p....|..|......" },
-  { name: "HREF",   wave: "0..1.|.0|1..0.." },
-  { name: "VSYNC",  wave: "010..|..|....10" },
-  { name: "D[7:0]", wave: "x..45|6x|=..x..", data: ["B0", "", "Bn", "LastRow"] }
-]}
+{
+  signal: [
+    [ 'clk',
+      { name: "PCLK",   wave: "p...................." },
+    ],
+    [ 'ctrl',
+      { name: "HREF",   wave: "0..1..|...0|.1.....0..", phase: 0.5 },
+      { name: "VSYNC",  wave: "010...|....|........10", phase: 0.5 },
+    ],
+    [ 'data',
+      { name: "D[7:0]", wave: "x..45.|..6x|.=..|..x..", phase: 0.5, data: ["B0", "", "Bn", "       Last     Row"] },
+    ]
+  ],
+  config: { hscale: 1 }
+}
 ----
 endif::[]
 ====
