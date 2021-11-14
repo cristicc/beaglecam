@@ -12,14 +12,13 @@
  * RPMSG_BUF_SIZE, RPMSG_MESSAGE_SIZE, RPMSG_HEADER_SIZE in pru_rpmsg.h and
  * struct pru_rpmsg_hdr in pru_rpmsg.c).
 
- * To allow validation of the incoming data on the ARM  side, PRU1 adds a 1-byte
+ * To allow validation of the incoming data on the ARM side, PRU1 adds a 1-byte
  * frame section ID and a 2-byte sequence number, followed by pixel data. The
  * sequence number is reset when the frame section changes.
  *
- * The host can manage the frame aquisition by sending dedicated RPMsg commands
- * to PRU1. Additionally, frame aquisition is automatically stopped in case
- * unexpected errors occured. Those errors are sent to the host via dedicated
- * log messages.
+ * The host can manage the frame acquisition by sending RPMsg commands to PRU1.
+ * Additionally, frame acquisition is automatically stopped in case unexpected
+ * errors occurred. The errors are sent to the host via dedicated log messages.
  *
  * Copyright (C) 2021 Cristian Ciocaltea <cristian.ciocaltea@gmail.com>
  */
@@ -62,10 +61,13 @@ volatile register uint32_t __R31;
 #define PRU0_ACK_TMOUT_USEC		1000
 
 /* Timeout waiting for cap_data messages from PRU0 */
-#define PRU0_CAP_TMOUT_USEC		5000
+#define PRU0_CAP_TMOUT_USEC		30000
 
-/* Diagnosis via LED blinking */
-#define PIN_LED				13 /* P8_20 */
+/* Pin input for camera VSYNC signal (P8_21) */
+#define PIN_VSYNC			12
+
+/* Pin output for diagnosis LED blinking (P8_20) */
+#define PIN_LED				13
 
 /*
  * Standard structure copied from pru_rpmsg.c.
@@ -447,9 +449,12 @@ void main(void)
 
 		if (run_state == BCAM_CAP_PAUSED) {
 			if (SMEM.cap_config.test_mode == 0) {
-				/* TODO: check VSYNC line */
-				/* VSYNC not yet LOW, process pending ARM commands */
-				continue;
+				/* VSYNC not yet HIGH, process pending ARM commands */
+				if (READ_PIN(PIN_VSYNC) == LOW)
+					continue;
+
+				/* VSYNC HIGH, wait for LOW */
+				while (READ_PIN(PIN_VSYNC) == HIGH);
 			} else {
 				/*
 				 * Simulate VSYNC wait according to the OV7670 specs:
@@ -549,12 +554,6 @@ void main(void)
 						       BCAM_PRU_LOG_ERROR, "Failed to pause capture");
 
 				run_state = BCAM_CAP_PAUSED;
-
-				if (SMEM.cap_config.test_mode == 0) {
-					/* TODO: Wait for VSYNC turning HIGH */
-					USLEEP(1);
-				}
-
 				break;
 			}
 

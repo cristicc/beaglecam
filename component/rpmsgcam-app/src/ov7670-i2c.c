@@ -120,7 +120,7 @@ int ov7670_i2c_setup(const char *dev_path)
 	const struct regval_list ov7670_custom_regs[] = {
 		{ REG_CLKRC, 0x1 },					/* F(internal clock) = F(input clock)/2 */
 		{ REG_COM7, COM7_FMT_QVGA | COM7_RGB },
-		{ REG_COM10, COM10_PCLK_HB },		/* Suppress PCLK on horiz blank */
+		/*{ REG_COM10, COM10_PCLK_HB },*/	/* Suppress PCLK on horiz blank */
 		{ REG_COM14, COM14_DCWEN | 0x1 },	/* DCW/PCLK-scale enable, PCLK divider=2 */
 		/* TODO: check if needed to set SCALING_PCLK_DIV[3:0] (0x73) */
 	};

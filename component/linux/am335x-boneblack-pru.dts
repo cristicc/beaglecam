@@ -99,7 +99,7 @@
 
 	bb_lcd_pwm_backlight_pins: pinmux_bb_lcd_pwm_backlight_pins {
 		pinctrl-single,pins = <
-			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, 0x0, MUX_MODE4)	/* mcasp0_ahclkr.eCAP2_in_PWM2_out */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, PIN_OUTPUT, MUX_MODE4)	/* mcasp0_ahclkr.eCAP2_in_PWM2_out */
 		>;
 	};
 
@@ -131,17 +131,53 @@
 	beaglecam_pins: pinmux_beaglecam_pins {
 		pinctrl-single,pins = <
 			/* GPIO output on P9_13 to signal system boot completion */
-			AM33XX_PADCONF(AM335X_PIN_GPMC_WPN, PIN_OUTPUT, MUX_MODE7)
+			AM33XX_PADCONF(AM335X_PIN_GPMC_WPN, PIN_OUTPUT, MUX_MODE7)	/* gpmc_wpn.gpio0[31] */
 
 			/* PRU1 output on P8_20 to control a diagnosis LED */
-			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN2, PIN_OUTPUT, MUX_MODE5)
+			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN2, PIN_OUTPUT, MUX_MODE5)	/* gpmc_csn2.pr1_pru1_pru_r30_13 */
+
+			/* PRU0 input on P9_31 to read camera pin D0 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKX, PIN_INPUT, MUX_MODE6)	/* mcasp0_aclkx.pr1_pru0_pru_r31_0 */
+
+			/* PRU0 input on P9_29 to read camera pin D1 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_FSX, PIN_INPUT, MUX_MODE6)	/* mcasp0_fsx.pr1_pru0_pru_r31_1 */
+
+			/* PRU0 input on P9_30 to read camera pin D2 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR0, PIN_INPUT, MUX_MODE6)	/* mcasp0_axr0.pr1_pru0_pru_r31_2 */
 
 			/*
-			 * Bit 6 of the PRU0 registers 30 & 31 (GPIO3_20) is routed to
-			 * P9_41 (GPIO0_20 / CLKOUT2). To be able to use them it is
-			 * necessary to set GPIO0_20 to input mode.
+			 * Bit 4 of the PRU0 registers 30 & 31 (GPIO3_18) is shared
+			 * with GPIO0_7 on P9_42, hence set GPIO0_7 to input mode.
 			 */
-			AM33XX_PADCONF(AM335X_PIN_XDMA_EVENT_INTR1, PIN_INPUT, MUX_MODE7)
+			AM33XX_PADCONF(AM335X_PIN_ECAP0_IN_PWM0_OUT, PIN_INPUT, MUX_MODE7) /* eCAP0_in_PWM0_out.gpio0[7] */
+			/* PRU0 input on P9_42 to read camera pin D4 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKR, PIN_INPUT, MUX_MODE6)	/* mcasp0_aclkr.pr1_pru0_pru_r31_4 */
+
+			/* PRU0 input on P9_27 to read camera pin D5 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_FSR, PIN_INPUT, MUX_MODE6)	/* mcasp0_fsr.pr1_pru0_pru_r31_5 */
+
+			/*
+			 * Bit 6 of the PRU0 registers 30 & 31 (GPIO3_20) is shared
+			 * with GPIO0_20 on P9_41, hence set GPIO0_20 to input mode.
+			 */
+			AM33XX_PADCONF(AM335X_PIN_XDMA_EVENT_INTR1, PIN_INPUT, MUX_MODE7) /* xdma_event_intr1.gpio0[20] */
+			/* PRU0 input on P9_41 to read camera pin D6 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR1, PIN_INPUT, MUX_MODE6)	/* mcasp0_axr1.pr1_pru0_pru_r31_6 */
+
+			/* PRU0 input on P9_25 to read camera pin D7 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKX, PIN_INPUT, MUX_MODE6)	/* mcasp0_ahclkx.pr1_pru0_pru_r31_7 */
+
+			/* PRU0 input on P8_16 to read camera pin D3 */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD14, PIN_INPUT, MUX_MODE6)	/* gpmc_ad14.pr1_pru0_pru_r31_14 */
+
+			/* PRU0 input on P8_15 to read camera pin PCLK */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_AD15, PIN_INPUT, MUX_MODE6)	/* gpmc_ad15.pr1_pru0_pru_r31_15 */
+
+			/* PRU0 input on P9_24 to read camera pin HREF */
+			AM33XX_PADCONF(AM335X_PIN_UART1_TXD, PIN_INPUT, MUX_MODE6)	/* uart1_txd.pr1_pru0_pru_r31_16 */
+
+			/* PRU1 input on P8_21 to read camera pin VSYNC */
+			AM33XX_PADCONF(AM335X_PIN_GPMC_CSN1, PIN_INPUT, MUX_MODE6)	/* gpmc_csn1.pr1_pru1_pru_r31_12 */
 		>;
 	};
 };

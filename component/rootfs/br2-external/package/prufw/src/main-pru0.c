@@ -5,16 +5,9 @@
  * scratch pad banks. The data is in RGB565 format, which means that 16 bits
  * (2 bytes) are used per pixel.
  *
- * The start of each frame is signalled by VSYNC going low while the first line
- * of data appears when HREF goes high. Since from PRU0 we can only access data
+ * The start of each frame is signaled by VSYNC going LOW while the first line
+ * of data appears when HREF goes HIGH. Since from PRU0 we can only access data
  * lines D0-D7, PCLK and HREF signals, the VSYNC signal is handled by PRU1.
- *
- * Once the camera has been setup via the I2C-like interface for QQVGA mode,
- * PCLK runs at 2 MHz, therefore the clock period is 0.5 usec. After HREF goes
- * high, the line data is read in ~160 usec (160 pixels * 2 B/pixel x 0.5 usec),
- * followed by 640 usec delay until the next line (see "QQVGA Frame Timing" in
- * OV7670 datasheet). After the last line in a frame (i.e. 120th line) there is
- * ~900 usec delay until VSYNC goes high to indicate the frame is complete.
  *
  * PRU0 starts waiting for a command in the shared memory buffer to be set by
  * PRU1 indicating that PRU0 should proceed reading data from the camera module.
@@ -33,6 +26,19 @@
 #define PRU0
 
 volatile register uint32_t __R31;
+
+#define PIN_D0		0  /* Pin input for camera D0 signal (P9_31) */
+#define PIN_D1		1  /* Pin input for camera D1 signal (P9_29) */
+#define PIN_D2		2  /* Pin input for camera D2 signal (P9_30) */
+#define PIN_D4		4  /* Pin input for camera D4 signal (P9_42) */
+#define PIN_D5		5  /* Pin input for camera D5 signal (P9_27) */
+#define PIN_D6		6  /* Pin input for camera D6 signal (P9_41) */
+#define PIN_D7		7  /* Pin input for camera D7 signal (P9_25) */
+#define PIN_D3		14 /* Pin input for camera D3 signal (P8_16) */
+#define PIN_PCLK	15 /* Pin input for camera PCLK signal (P8_15) */
+/* FIXME: P9_24 unable to read input */
+//#define PIN_HREF	16 /* Pin input for camera HREF signal (P9_24) */
+#define PIN_HREF	PIN_D7
 
 /* Global data */
 static struct cap_data frm_data;
@@ -140,14 +146,42 @@ check_status:
 		if (SMEM.cap_config.test_mode != 0) {
 			generate_test_data(&frm_data);
 
-			/* Simulate PCLK */
+			/* Simulate PCLK duration */
 			delay_cycles_var(test_pclk_cycles);
 
 			if (check_pru1_cmd() != PRU_CMD_NONE)
 				goto check_status;
-
 		} else {
-			//TODO: get data from camera module
+			uint8_t iter = 0;
+
+			while (1) {
+				/* Wait for LOW PCLK */
+				while (READ_PIN(PIN_PCLK) == HIGH);
+
+				/* Wait for HIGH PCLK */
+				while (READ_PIN(PIN_PCLK) == LOW);
+
+				/*
+				 * Read camera data and control lines, on the
+				 * rising edge of pixel clock, when HREF is 1.
+				 */
+				if (READ_PIN(PIN_HREF) == HIGH) {
+					frm_data.data[iter++] = (__R31 & 0xf7) | (READ_PIN(PIN_D3) << 3);
+					if (iter == sizeof(frm_data.data)) {
+						frm_data.len = iter;
+						break;	/* Buffer full */
+					}
+				} else {
+					if (iter > 0) {
+						//USLEEP(32); //TODO
+						frm_data.len = iter;
+						break;	/* End of frame line */
+					}
+
+					if (check_pru1_cmd() != PRU_CMD_NONE)
+						goto check_status;
+				}
+			}
 		}
 
 		frm_data.seq++;
